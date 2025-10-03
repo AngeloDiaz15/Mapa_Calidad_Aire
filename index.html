@@ -1,167 +1,99 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <title>Satélite (MODIS/VIIRS) + OSM (auto-switch por zoom)</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <style> html,body,#map{height:100%;margin:0;padding:0} </style>
+  <meta charset="UTF-8" />
+  <title>Mapa Satélite / Calles</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 100vh; width: 100vw; }
+    .leaflet-top.leaflet-left {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .custom-btn {
+      background: white;
+      border: 1px solid #ccc;
+      padding: 5px 10px;
+      margin: 5px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
-
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-  // ---------- utilidades ----------
-  function formatLocalDate(d){
-    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
-    return `${y}-${m}-${day}`;
-  }
-
-  function lonLatToTile(lon, lat, z){
-    const xtile = Math.floor((lon + 180) / 360 * Math.pow(2, z));
-    const latRad = lat * Math.PI / 180;
-    const ytile = Math.floor((1 - Math.log(Math.tan(latRad) + 1/Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z));
-    return {x: xtile, y: ytile};
-  }
-
-  async function tileExists(url){
-    try {
-      const res = await fetch(url, { method:'GET', mode:'cors', cache:'no-cache' });
-      return res.ok && res.headers.get('content-type') && res.headers.get('content-type').includes('image');
-    } catch(e){
-      return false;
+    // --- Fecha para NASA GIBS ---
+    function formatLocalDate(d) {
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
     }
-  }
 
-  function gibsTileUrl(layerName, dateStr, z, x, y, fmt='jpg'){
-    return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${dateStr}/GoogleMapsCompatible_Level9/${z}/${y}/${x}.${fmt}`;
-  }
-
-  async function chooseValidDate(layerName, ext='jpg', lon=0, lat=0){
-    // intenta hoy, sino ayer. Usa un tile de prueba pequeño (z=2) para comprobar existencia.
     const today = new Date();
-    const dToday = formatLocalDate(today);
-    const t = lonLatToTile(lon, lat, 2);
-    const urlToday = gibsTileUrl(layerName, dToday, 2, t.x, t.y, ext);
-    if (await tileExists(urlToday)) return dToday;
-    const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1);
-    const dY = formatLocalDate(yesterday);
-    const urlY = gibsTileUrl(layerName, dY, 2, t.x, t.y, ext);
-    if (await tileExists(urlY)) return dY;
-    return dToday; // fallback
-  }
+    const dateStr = formatLocalDate(today);
 
-  (async function(){
-    // ---------- configuración ----------
-    const modisLayerName = 'MODIS_Terra_CorrectedReflectance_TrueColor';
-    const viirsLayerName  = 'VIIRS_NOAA20_DayNightBand';
-    // Centro y zoom inicial
-    const mapCenter = [-9.2, -75.0]; // [lat, lon] (Perú)
-    const initialZoom = 4;
-    const zoomThresholdForStreets = 10; // si zoom >= 10 mostrará OSM
+    // --- Capas ---
+    const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    });
 
-    // Elegir fecha válida (intenta hoy -> ayer) usando la lon/lat del centro
-    const modisDate = await chooseValidDate(modisLayerName, 'jpg', mapCenter[1], mapCenter[0]);
-    const viirsDate = await chooseValidDate(viirsLayerName, 'png', mapCenter[1], mapCenter[0]);
+    const modis = L.tileLayer(
+      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`, {
+      maxZoom: 9,
+      attribution: 'NASA MODIS'
+    });
 
-    // Plantillas
-    const modisUrl  = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${modisLayerName}/default/${modisDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
-    const viirsUrl  = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${viirsLayerName}/default/${viirsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`;
-    const osmUrl    = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    const viirs = L.tileLayer(
+      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_DayNightBand_At_Sensor_Monthly/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg`, {
+      maxZoom: 8,
+      attribution: 'NASA VIIRS'
+    });
 
-    // Crear capas (no añadimos aún al mapa)
-    const modis  = L.tileLayer(modisUrl, { maxZoom: 9, attribution: 'Imagery © NASA GIBS / MODIS' });
-    const viirs  = L.tileLayer(viirsUrl, { maxZoom: 9, attribution: 'Imagery © NASA GIBS / VIIRS' });
-    const streets= L.tileLayer(osmUrl,   { maxZoom: 19, attribution: '© OpenStreetMap contributors' });
-
-    // Determinar si es día o noche en el centro (usando SunCalc)
-    let isDay = true;
-    try {
-      const now = new Date();
-      const times = SunCalc.getTimes(now, mapCenter[0], mapCenter[1]);
-      isDay = (now >= times.sunrise && now <= times.sunset);
-    } catch(e){ isDay = true; }
-
-    // Elegir capa inicial según zoom y día/noche
-    let initialLayer;
-    if (initialZoom >= zoomThresholdForStreets) {
-      initialLayer = streets;
-    } else {
-      initialLayer = isDay ? modis : viirs;
-    }
-
-    // Crear mapa con la capa inicial
+    // --- Inicializar mapa ---
     const map = L.map('map', {
-      center: mapCenter,
-      zoom: initialZoom,
-      layers: [ initialLayer ]
+      center: [0, 0],
+      zoom: 2,
+      layers: []
     });
 
-    // Añadir control de capas (base layers)
-    const baseLayers = {
-      'MODIS (día)': modis,
-      'VIIRS (noche)': viirs,
-      'Calles (OSM)': streets
-    };
-    const layersControl = L.control.layers(baseLayers, null, {collapsed: false}).addTo(map);
-
-    // Función para forzar el cambio de base (al manejarlo por zoom)
-    function switchBaseTo(layer){
-      // Remueve satélites y calles si están y añade la capa solicitada.
-      // No usamos map.eachLayer: manejamos explícitamente.
-      if (layer === 'streets') {
-        if (map.hasLayer(modis))  map.removeLayer(modis);
-        if (map.hasLayer(viirs))  map.removeLayer(viirs);
-        if (!map.hasLayer(streets)) streets.addTo(map);
-      } else if (layer === 'modis') {
-        if (map.hasLayer(streets))  map.removeLayer(streets);
-        if (map.hasLayer(viirs))    map.removeLayer(viirs);
-        if (!map.hasLayer(modis))   modis.addTo(map);
-      } else if (layer === 'viirs') {
-        if (map.hasLayer(streets))  map.removeLayer(streets);
-        if (map.hasLayer(modis))    map.removeLayer(modis);
-        if (!map.hasLayer(viirs))   viirs.addTo(map);
-      }
-      // El control de capas de Leaflet detecta el state del mapa y actualizará el radio.
+    // --- Lógica día/noche (6am - 6pm día, 6pm - 6am noche) ---
+    const hour = today.getHours();
+    let satelliteLayer;
+    if (hour >= 6 && hour < 18) {
+      satelliteLayer = modis;
+    } else {
+      satelliteLayer = viirs;
     }
+    map.addLayer(satelliteLayer);
 
-    // Manejar zoom: cambiar automáticamente a OSM si el zoom supera el umbral
-    map.on('zoomend', function(){
-      const z = map.getZoom();
-      if (z >= zoomThresholdForStreets) {
-        // si el usuario ya seleccionó manualmente OSM, esto igual asegura que está visible
-        switchBaseTo('streets');
-      } else {
-        // volvemos a satélite según hora
-        switchBaseTo(isDay ? 'modis' : 'viirs');
-      }
-    });
-
-    // Manejar cambio manual por el control: si el usuario selecciona una base, respetamos su elección
-    // (pero si se produce un zoom que obligue a OSM, el zoom handler lo forzará).
-    map.on('baselayerchange', function(e){
-      // e.name es la etiqueta mostrada en el control; la usamos para detectar
-      if (e.name && e.name.toLowerCase().includes('osm')) {
-        // si el usuario eligió OSM manualmente, déjalo así (hasta que zoom lo cambie)
-        // no hacemos nada especial; ya está en el mapa
-      } else if (e.name && e.name.toLowerCase().includes('modis')) {
-        // si seleccionó MODIS manualmente, quitamos VIIRS/OSM
-        switchBaseTo('modis');
-      } else if (e.name && e.name.toLowerCase().includes('viirs')) {
-        switchBaseTo('viirs');
-      }
-    });
-
-    // DEBUG: muestra en consola el estado de capas cuando cambian
-    function logState(){ console.log('zoom', map.getZoom(), 'has modis', map.hasLayer(modis), 'viirs', map.hasLayer(viirs), 'streets', map.hasLayer(streets)); }
-    map.on('zoomend baselayerchange', logState);
-    logState(); // estado inicial
-
-  })();
+    // --- Botón personalizado ---
+    const toggleBtn = L.control({position: 'topleft'});
+    toggleBtn.onAdd = function() {
+      const btn = L.DomUtil.create('button', 'custom-btn');
+      btn.innerHTML = 'Cambiar a Calles';
+      btn.onclick = function() {
+        if (map.hasLayer(satelliteLayer)) {
+          map.removeLayer(satelliteLayer);
+          map.addLayer(streets);
+          btn.innerHTML = 'Cambiar a Satélite';
+        } else {
+          map.removeLayer(streets);
+          map.addLayer(satelliteLayer);
+          btn.innerHTML = 'Cambiar a Calles';
+        }
+      };
+      return btn;
+    };
+    toggleBtn.addTo(map);
   </script>
 </body>
 </html>
+
 

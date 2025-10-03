@@ -1,120 +1,75 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Mapa Satelital MODIS / VIIRS + Calles</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <title>Mapa Satelital + Calles</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
   <style>
-    html, body, #map { height:100%; margin:0; padding:0; }
+    #map { height: 100vh; width: 100%; }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-  // ---------- util: fecha local YYYY-MM-DD ----------
-  function formatLocalDate(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth()+1).padStart(2,'0');
-    const day = String(d.getDate()).padStart(2,'0');
-    return `${y}-${m}-${day}`;
-  }
-
-  // ---------- util: lon,lat -> tile x,y ----------
-  function lonLatToTile(lon, lat, z) {
-    const xtile = Math.floor((lon + 180) / 360 * Math.pow(2, z));
-    const latRad = lat * Math.PI / 180;
-    const ytile = Math.floor((1 - Math.log(Math.tan(latRad) + 1/Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z));
-    return {x: xtile, y: ytile};
-  }
-
-  // ---------- probar si existe una baldosa ----------
-  async function tileExists(url) {
-    try {
-      const res = await fetch(url, {method:'GET', mode:'cors', cache:'no-cache'});
-      return res.ok && res.headers.get('content-type') && res.headers.get('content-type').includes('image');
-    } catch(e){
-      return false;
+    // Obtener fecha de ayer (para asegurar que NASA ya tenga imágenes disponibles)
+    function getYesterday() {
+      const today = new Date();
+      today.setDate(today.getDate() - 1);
+      return today.toISOString().split('T')[0];
     }
-  }
 
-  // ---------- construir URL para GIBS ----------
-  function gibsTileUrl(layerName, dateStr, z, x, y, fmt='jpg') {
-    return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${dateStr}/GoogleMapsCompatible_Level9/${z}/${y}/${x}.${fmt}`;
-  }
+    const dateStr = getYesterday();
 
-  // ---------- elegir fecha válida (hoy o ayer) ----------
-  async function chooseValidDate(layerName, ext='jpg', lon=0, lat=0) {
-    const today = new Date();
-    const dToday = formatLocalDate(today);
-    const tile = lonLatToTile(lon, lat, 2);
-    const urlToday = gibsTileUrl(layerName, dToday, 2, tile.x, tile.y, ext);
-    if (await tileExists(urlToday)) return dToday;
+    // Capa MODIS (solo hasta zoom 9)
+    const modis = L.tileLayer(
+      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
+      { maxZoom: 9, attribution: "NASA GIBS" }
+    );
 
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const dY = formatLocalDate(yesterday);
-    const urlY = gibsTileUrl(layerName, dY, 2, tile.x, tile.y, ext);
-    if (await tileExists(urlY)) return dY;
+    // Capa VIIRS Night Band (también solo hasta zoom 9)
+    const viirs = L.tileLayer(
+      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`,
+      { maxZoom: 9, attribution: "NASA GIBS" }
+    );
 
-    return dToday;
-  }
+    // Base callejero (hasta zoom 19)
+    const streets = L.tileLayer(
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { maxZoom: 19, attribution: "© OpenStreetMap" }
+    );
 
-  (async function main(){
-    // CONFIG
-    const modisLayerName = 'MODIS_Terra_CorrectedReflectance_TrueColor';
-    const viirsLayerName = 'VIIRS_Black_Marble';
-    const mapCenter = [ -9.2, -75.0 ]; // Centro Perú
-    const initialZoom = 4;
-
-    // Fechas válidas
-    const modisDate = await chooseValidDate(modisLayerName, 'jpg');
-    const viirsDate = await chooseValidDate(viirsLayerName, 'png');
-
-    // URLs de tiles
-    const modisUrlTemplate = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${modisLayerName}/default/${modisDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
-    const viirsUrlTemplate = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${viirsLayerName}/default/${viirsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`;
-
-    // CAPAS
-    const modis = L.tileLayer(modisUrlTemplate, { maxZoom: 9, attribution: 'Imagery © NASA GIBS / MODIS' });
-    const viirs = L.tileLayer(viirsUrlTemplate, { maxZoom: 9, attribution: 'Imagery © NASA GIBS / VIIRS' });
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 19
-    });
-
-    // MAPA
+    // Inicializar mapa
     const map = L.map('map', {
-      center: mapCenter,
-      zoom: initialZoom,
+      center: [0, 0],
+      zoom: 4,
       layers: [modis] // inicia con MODIS
     });
 
-    // Control manual de capas
+    // Control de capas manual
     const baseLayers = {
-      'MODIS (día)': modis,
-      'VIIRS (noche)': viirs
+      "MODIS Día": modis,
+      "VIIRS Noche": viirs,
+      "Calles (OSM)": streets
     };
-    const overlays = {
-      'Calles (OSM)': osm
-    };
-    L.control.layers(baseLayers, overlays).addTo(map);
+    L.control.layers(baseLayers).addTo(map);
 
-    // Auto: mostrar OSM cuando se hace zoom >= 10
-    map.on('zoomend', function(){
-      if (map.getZoom() >= 10) {
-        if (!map.hasLayer(osm)) map.addLayer(osm);
+    // Cambio automático: si el zoom es mayor a 9 → OSM
+    map.on('zoomend', function () {
+      if (map.getZoom() > 9) {
+        if (!map.hasLayer(streets)) {
+          map.eachLayer(l => map.removeLayer(l));
+          streets.addTo(map);
+        }
       } else {
-        if (map.hasLayer(osm)) map.removeLayer(osm);
+        if (!map.hasLayer(modis)) {
+          map.eachLayer(l => map.removeLayer(l));
+          modis.addTo(map);
+        }
       }
     });
-  })();
   </script>
 </body>
 </html>
-
-
 

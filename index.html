@@ -1,95 +1,116 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <title>Mapa Satélite / Calles con VIIRS TrueColor</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <meta charset="utf-8" />
+  <title>Satélite MODIS/VIIRS + OSM</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    #map { height: 100vh; width: 100vw; }
-    .leaflet-top.leaflet-left {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-    }
-    .custom-btn {
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    #toggleBtn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
       background: white;
-      border: 1px solid #ccc;
-      padding: 5px 10px;
-      margin: 5px;
-      cursor: pointer;
+      padding: 6px 12px;
+      border: 1px solid #aaa;
       border-radius: 4px;
-      font-size: 14px;
+      cursor: pointer;
+      font-family: sans-serif;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <button id="toggleBtn">Ver calles</button>
 
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
   <script>
-    function formatLocalDate(d) {
-      const yyyy = d.getUTCFullYear();
-      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const dd = String(d.getUTCDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    }
+  // ---------- utilidades ----------
+  function formatDate(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
 
+  async function tileExists(url){
+    try {
+      const res = await fetch(url, { method:'HEAD', mode:'cors', cache:'no-cache' });
+      return res.ok;
+    } catch(e){ return false; }
+  }
+
+  async function chooseValidDate(layerId, ext='jpg', level='GoogleMapsCompatible_Level8'){
     const today = new Date();
-    const dateStr = formatLocalDate(today);
+    const dToday = formatDate(today);
+    const testUrl = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerId}/default/${dToday}/${level}/2/1/1.${ext}`;
+    if (await tileExists(testUrl)) return dToday;
 
-    const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap'
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate()-1);
+    const dY = formatDate(yesterday);
+    return dY;
+  }
+
+  (async function(){
+    // ---------- configuración ----------
+    const center = [-9.2, -75.0]; // Perú
+    const initialZoom = 4;
+
+    // Fechas válidas
+    const modisDate = await chooseValidDate("MODIS_Aqua_CorrectedReflectance_TrueColor", "jpg", "GoogleMapsCompatible_Level9");
+    const viirsDate = await chooseValidDate("VIIRS_NOAA20_DayNightBand", "png", "GoogleMapsCompatible_Level8");
+
+    // URLs
+    const modisUrl = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${modisDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
+    const viirsUrl = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_DayNightBand/default/${viirsDate}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`;
+    const osmUrl   = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+    // Capas
+    const modis = L.tileLayer(modisUrl, { maxZoom: 9, attribution: "NASA MODIS Aqua" });
+    const viirs = L.tileLayer(viirsUrl, { maxZoom: 8, attribution: "NASA VIIRS NOAA-20 DNB" });
+    const streets = L.tileLayer(osmUrl, { maxZoom: 19, attribution: "© OpenStreetMap" });
+
+    // Hora actual → día o noche
+    const now = new Date();
+    const hour = now.getHours();
+    const isDay = (hour >= 6 && hour < 18);
+
+    // Capa satelital inicial
+    let satelliteLayer = isDay ? modis : viirs;
+
+    // Crear mapa
+    const map = L.map("map", {
+      center: center,
+      zoom: initialZoom,
+      layers: [satelliteLayer]
     });
 
-    const modis = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`, {
-      maxZoom: 9,
-      attribution: 'NASA MODIS'
+    // Alternar con botón
+    let showingStreets = false;
+    const btn = document.getElementById("toggleBtn");
+    btn.addEventListener("click", function(){
+      if(showingStreets){
+        map.removeLayer(streets);
+        map.addLayer(satelliteLayer);
+        btn.textContent = "Ver calles";
+        showingStreets = false;
+      } else {
+        map.removeLayer(satelliteLayer);
+        map.addLayer(streets);
+        btn.textContent = "Ver satélite";
+        showingStreets = true;
+      }
     });
 
-    // Usa una capa VIIRS que sí está disponible en GIBS
-    const viirsTrueColor = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`, {
-      maxZoom: 9,
-      attribution: 'NASA VIIRS'
-    });
-
-    const map = L.map('map', {
-      center: [0, 0],
-      zoom: 2,
-      layers: []
-    });
-
-    const hour = today.getHours();
-    let satelliteLayer;
-    if (hour >= 6 && hour < 18) {
-      satelliteLayer = modis;
-    } else {
-      satelliteLayer = viirsTrueColor;
-    }
-    map.addLayer(satelliteLayer);
-
-    const toggleBtn = L.control({position: 'topleft'});
-    toggleBtn.onAdd = function() {
-      const btn = L.DomUtil.create('button', 'custom-btn');
-      btn.innerHTML = 'Cambiar a Calles';
-      btn.onclick = function() {
-        if (map.hasLayer(satelliteLayer)) {
-          map.removeLayer(satelliteLayer);
-          map.addLayer(streets);
-          btn.innerHTML = 'Cambiar a Satélite';
-        } else {
-          map.removeLayer(streets);
-          map.addLayer(satelliteLayer);
-          btn.innerHTML = 'Cambiar a Calles';
-        }
-      };
-      return btn;
-    };
-    toggleBtn.addTo(map);
+  })();
   </script>
 </body>
 </html>
+
+
 
 

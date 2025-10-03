@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Mapa Satélite / Calles</title>
+  <title>Mapa Satélite / Calles con VIIRS TrueColor</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
     #map { height: 100vh; width: 100vw; }
@@ -27,7 +27,6 @@
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    // --- Fecha para NASA GIBS ---
     function formatLocalDate(d) {
       const yyyy = d.getUTCFullYear();
       const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
@@ -38,7 +37,6 @@
     const today = new Date();
     const dateStr = formatLocalDate(today);
 
-    // --- Capas ---
     const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap'
@@ -50,30 +48,28 @@
       attribution: 'NASA MODIS'
     });
 
-    const viirs = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_ENCC/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg`, {
-      maxZoom: 8,
+    // Usa una capa VIIRS que sí está disponible en GIBS
+    const viirsTrueColor = L.tileLayer(
+      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`, {
+      maxZoom: 9,
       attribution: 'NASA VIIRS'
     });
 
-    // --- Inicializar mapa ---
     const map = L.map('map', {
       center: [0, 0],
       zoom: 2,
       layers: []
     });
 
-    // --- Lógica día/noche (6am - 6pm día, 6pm - 6am noche) ---
     const hour = today.getHours();
     let satelliteLayer;
     if (hour >= 6 && hour < 18) {
       satelliteLayer = modis;
     } else {
-      satelliteLayer = viirs;
+      satelliteLayer = viirsTrueColor;
     }
     map.addLayer(satelliteLayer);
 
-    // --- Botón personalizado ---
     const toggleBtn = L.control({position: 'topleft'});
     toggleBtn.onAdd = function() {
       const btn = L.DomUtil.create('button', 'custom-btn');
@@ -95,3 +91,5 @@
   </script>
 </body>
 </html>
+
+

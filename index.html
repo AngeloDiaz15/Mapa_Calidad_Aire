@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Mapa Satelital Diario - MODIS / VIIRS + OSM</title>
+  <title>Mapa Satelital MODIS / VIIRS</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -12,13 +12,10 @@
 <body>
   <div id="map"></div>
 
-  <!-- Leaflet -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- SunCalc para cálculo de día/noche -->
-  <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
 
   <script>
-  // --- utilidades ---
+  // ---------- util: fecha local YYYY-MM-DD ----------
   function formatLocalDate(d) {
     const y = d.getFullYear();
     const m = String(d.getMonth()+1).padStart(2,'0');
@@ -26,6 +23,7 @@
     return `${y}-${m}-${day}`;
   }
 
+  // ---------- util: lon,lat -> tile x,y (WebMercator) ----------
   function lonLatToTile(lon, lat, z) {
     const xtile = Math.floor((lon + 180) / 360 * Math.pow(2, z));
     const latRad = lat * Math.PI / 180;
@@ -33,93 +31,72 @@
     return {x: xtile, y: ytile};
   }
 
+  // ---------- probar si existe una baldosa (tile) ----------
   async function tileExists(url) {
     try {
       const res = await fetch(url, {method:'GET', mode:'cors', cache:'no-cache'});
       return res.ok && res.headers.get('content-type') && res.headers.get('content-type').includes('image');
-    } catch(e){ return false; }
+    } catch(e){
+      return false;
+    }
   }
 
+  // ---------- construir URL de muestra para GIBS (z,x,y) ----------
   function gibsTileUrl(layerName, dateStr, z, x, y, fmt='jpg') {
     return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${dateStr}/GoogleMapsCompatible_Level9/${z}/${y}/${x}.${fmt}`;
   }
 
-  async function chooseValidDate(layerName, lon=0, lat=0) {
+  // ---------- elegir fecha válida (intenta hoy, sino ayer) ----------
+  async function chooseValidDate(layerName, ext='jpg', lon=0, lat=0) {
     const today = new Date();
     const dToday = formatLocalDate(today);
     const tile = lonLatToTile(lon, lat, 2);
-    const urlToday = gibsTileUrl(layerName, dToday, 2, tile.x, tile.y);
+    const urlToday = gibsTileUrl(layerName, dToday, 2, tile.x, tile.y, ext);
     if (await tileExists(urlToday)) return dToday;
-    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
     const dY = formatLocalDate(yesterday);
-    const urlY = gibsTileUrl(layerName, dY, 2, tile.x, tile.y);
+    const urlY = gibsTileUrl(layerName, dY, 2, tile.x, tile.y, ext);
     if (await tileExists(urlY)) return dY;
-    return dToday;
+
+    return dToday; // fallback
   }
 
   (async function main(){
-    // Configuración inicial
+    // CONFIG
     const modisLayerName = 'MODIS_Terra_CorrectedReflectance_TrueColor';
     const viirsLayerName = 'VIIRS_Black_Marble';
-    const mapCenter = [ -9.19, -75.02 ]; // Perú
+    const mapCenter = [ -9.2, -75.0 ]; // Centro Perú
     const initialZoom = 4;
 
-    const modisDate = await chooseValidDate(modisLayerName);
-    const viirsDate = await chooseValidDate(viirsLayerName);
+    // Fechas válidas
+    const modisDate = await chooseValidDate(modisLayerName, 'jpg');
+    const viirsDate = await chooseValidDate(viirsLayerName, 'png');
 
-    // Plantillas de URL
-    const modisUrl = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${modisLayerName}/default/${modisDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
-    const viirsUrl = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${viirsLayerName}/default/${viirsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`;
+    // URLs de tiles
+    const modisUrlTemplate = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${modisLayerName}/default/${modisDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
+    const viirsUrlTemplate = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${viirsLayerName}/default/${viirsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`;
 
-    const modis = L.tileLayer(modisUrl, { maxZoom: 9, attribution: 'Imagery: NASA GIBS / MODIS' });
-    const viirs = L.tileLayer(viirsUrl, { maxZoom: 9, attribution: 'Imagery: NASA GIBS / VIIRS' });
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' });
+    // CAPAS
+    const modis = L.tileLayer(modisUrlTemplate, { maxZoom: 9, attribution: 'Imagery © NASA GIBS / MODIS' });
+    const viirs = L.tileLayer(viirsUrlTemplate, { maxZoom: 9, attribution: 'Imagery © NASA GIBS / VIIRS' });
 
-    // Detectar día o noche
-    const now = new Date();
-    let isDay = true;
-    try {
-      const times = SunCalc.getTimes(now, mapCenter[0], mapCenter[1]);
-      isDay = (now >= times.sunrise && now <= times.sunset);
-    } catch(e){}
-
-    // Crear mapa
+    // MAPA
     const map = L.map('map', {
       center: mapCenter,
       zoom: initialZoom,
-      layers: [ isDay ? modis : viirs ]
+      layers: [modis] // inicia con MODIS
     });
 
     // Control de capas
-    const baseLayers = {
-      "MODIS (día)": modis,
-      "VIIRS (noche)": viirs,
-      "Calles (OSM)": osm
-    };
-    L.control.layers(baseLayers).addTo(map);
-
-    // Mostrar calles al acercar zoom
-    map.on('zoomend', function(){
-      if (map.getZoom() >= 9) {
-        if (!map.hasLayer(osm)) map.addLayer(osm);
-      }
-    });
-
-    // --- Ejemplo: cargar tus capas GeoJSON exportadas desde QGIS ---
-    // Guarda tus geojson en una carpeta "geojson/" dentro del repo
-    fetch('geojson/calles.geojson')
-      .then(r => r.json())
-      .then(geojson => {
-        L.geoJSON(geojson, {
-          style: { color:'#2E86AB', weight:1 },
-          onEachFeature: (f, layer) => {
-            if (f.properties && f.properties.name) layer.bindPopup(f.properties.name);
-          }
-        }).addTo(map);
-      })
-      .catch(()=>{ console.log("No se encontró geojson/calles.geojson"); });
-
+    L.control.layers({
+      'MODIS (día)': modis,
+      'VIIRS (noche)': viirs
+    }).addTo(map);
   })();
   </script>
 </body>
 </html>
+
+

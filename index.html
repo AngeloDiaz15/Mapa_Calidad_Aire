@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Mapa Satelital MODIS / VIIRS</title>
+  <title>Mapa Satelital MODIS / VIIRS + Calles</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -23,7 +23,7 @@
     return `${y}-${m}-${day}`;
   }
 
-  // ---------- util: lon,lat -> tile x,y (WebMercator) ----------
+  // ---------- util: lon,lat -> tile x,y ----------
   function lonLatToTile(lon, lat, z) {
     const xtile = Math.floor((lon + 180) / 360 * Math.pow(2, z));
     const latRad = lat * Math.PI / 180;
@@ -31,7 +31,7 @@
     return {x: xtile, y: ytile};
   }
 
-  // ---------- probar si existe una baldosa (tile) ----------
+  // ---------- probar si existe una baldosa ----------
   async function tileExists(url) {
     try {
       const res = await fetch(url, {method:'GET', mode:'cors', cache:'no-cache'});
@@ -41,12 +41,12 @@
     }
   }
 
-  // ---------- construir URL de muestra para GIBS (z,x,y) ----------
+  // ---------- construir URL para GIBS ----------
   function gibsTileUrl(layerName, dateStr, z, x, y, fmt='jpg') {
     return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${dateStr}/GoogleMapsCompatible_Level9/${z}/${y}/${x}.${fmt}`;
   }
 
-  // ---------- elegir fecha válida (intenta hoy, sino ayer) ----------
+  // ---------- elegir fecha válida (hoy o ayer) ----------
   async function chooseValidDate(layerName, ext='jpg', lon=0, lat=0) {
     const today = new Date();
     const dToday = formatLocalDate(today);
@@ -60,7 +60,7 @@
     const urlY = gibsTileUrl(layerName, dY, 2, tile.x, tile.y, ext);
     if (await tileExists(urlY)) return dY;
 
-    return dToday; // fallback
+    return dToday;
   }
 
   (async function main(){
@@ -81,6 +81,10 @@
     // CAPAS
     const modis = L.tileLayer(modisUrlTemplate, { maxZoom: 9, attribution: 'Imagery © NASA GIBS / MODIS' });
     const viirs = L.tileLayer(viirsUrlTemplate, { maxZoom: 9, attribution: 'Imagery © NASA GIBS / VIIRS' });
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19
+    });
 
     // MAPA
     const map = L.map('map', {
@@ -89,14 +93,29 @@
       layers: [modis] // inicia con MODIS
     });
 
-    // Control de capas
-    L.control.layers({
+    // Control manual de capas
+    const baseLayers = {
       'MODIS (día)': modis,
       'VIIRS (noche)': viirs
-    }).addTo(map);
+    };
+    const overlays = {
+      'Calles (OSM)': osm
+    };
+    L.control.layers(baseLayers, overlays).addTo(map);
+
+    // Auto: mostrar OSM cuando se hace zoom >= 10
+    map.on('zoomend', function(){
+      if (map.getZoom() >= 10) {
+        if (!map.hasLayer(osm)) map.addLayer(osm);
+      } else {
+        if (map.hasLayer(osm)) map.removeLayer(osm);
+      }
+    });
   })();
   </script>
 </body>
 </html>
+
+
 
 

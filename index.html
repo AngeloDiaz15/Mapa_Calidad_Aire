@@ -51,7 +51,7 @@
     });
 
     const viirs = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/%7BTime%7D/%7BTileMatrixSet%7D/%7BTileMatrix%7D/%7BTileRow%7D/%7BTileCol%7D.png`, {
+      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_ENCC/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg`, {
       maxZoom: 8,
       attribution: 'NASA VIIRS'
     });
@@ -95,6 +95,7 @@
   </script>
 </body>
 </html>
+
 
 
 

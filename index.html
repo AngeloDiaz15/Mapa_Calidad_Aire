@@ -25,6 +25,11 @@
       box-shadow:0 2px 6px rgba(0,0,0,0.3); display:none; z-index:1100;
     }
     .compare-panel h4 { margin:0 0 10px; text-align:center; font-size:15px; }
+    .close-btn {
+      position:absolute; top:5px; right:8px;
+      background:none; border:none; font-size:16px; cursor:pointer; color:#666;
+    }
+    .close-btn:hover { color:#000; }
 
     .indicators-panel {
       position:absolute; top:60px; left:10px;
@@ -43,6 +48,7 @@
       padding:6px 12px; border-radius:6px; font-family:sans-serif;
       font-size:14px; display:none; z-index:1200;
     }
+
     .fade-layer { opacity:0; transition:opacity 1.5s ease; }
     .fade-layer.visible { opacity:1; }
   </style>
@@ -57,6 +63,7 @@
   </div>
 
   <div class="compare-panel" id="comparePanel">
+    <button class="close-btn" id="closeCompare">✖</button>
     <h4>Comparación</h4>
     <label>Fecha inicial:</label>
     <input type="date" id="startDate" style="width:100%; margin-bottom:8px;">
@@ -107,6 +114,7 @@
     const btn=document.getElementById("toggleBtn");
     const datePicker=document.getElementById("datePicker");
     const compareBtn=document.getElementById("compareBtn");
+    const closeCompare=document.getElementById("closeCompare");
     const indicatorsBtn=document.getElementById("indicatorsBtn");
     const comparePanel=document.getElementById("comparePanel");
     const indicatorsPanel=document.getElementById("indicatorsPanel");
@@ -151,6 +159,7 @@
     compareBtn.addEventListener("click",()=>{
       comparePanel.style.display=comparePanel.style.display==="none"?"block":"none";
     });
+    closeCompare.addEventListener("click",()=>{ comparePanel.style.display="none"; });
 
     const startDate=document.getElementById("startDate");
     const endDate=document.getElementById("endDate");
@@ -191,6 +200,13 @@
       {id:"OMI_Ozone_Column_Amount",name:"Ozono total (O₃)"},
       {id:"FIRMS_VIIRS_SNPP_Night",name:"Focos de calor (VIIRS)"}
     ];
+    const resolutions={
+      OMPS_AI_L2_V8_Green:"2km",
+      OMI_NO2_Column_Amount_Tropospheric:"2km",
+      OMI_SO2_Column_Amount:"2km",
+      OMI_Ozone_Column_Amount:"2km",
+      FIRMS_VIIRS_SNPP_Night:"500m"
+    };
     const list=document.getElementById("indicatorsList");
     const indicatorLayers={};
 
@@ -205,8 +221,8 @@
         const date=datePicker.value||todayStr;
         if(e.target.checked){
           indicatorLayers[ind.id]=L.tileLayer(
-            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${ind.id}/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-            {maxZoom:8,opacity:0.7,attribution:"NASA GIBS"}
+            `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/${ind.id}/default/${date}/${resolutions[ind.id]}/{z}/{y}/{x}.png`,
+            {maxZoom:7,opacity:0.7,attribution:"NASA GIBS"}
           ).addTo(map);
         } else {
           if(indicatorLayers[ind.id]) map.removeLayer(indicatorLayers[ind.id]);
@@ -219,8 +235,8 @@
         if(map.hasLayer(indicatorLayers[id])){
           map.removeLayer(indicatorLayers[id]);
           indicatorLayers[id]=L.tileLayer(
-            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-            {maxZoom:8,opacity:0.7,attribution:"NASA GIBS"}
+            `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/${id}/default/${dateStr}/${resolutions[id]}/{z}/{y}/{x}.png`,
+            {maxZoom:7,opacity:0.7,attribution:"NASA GIBS"}
           ).addTo(map);
         }
       }
@@ -234,4 +250,3 @@
   </script>
 </body>
 </html>
-

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Mapa Satélite Calles + Comparación + Indicadores</title>
+  <title>Mapa Satélite + Calles + Comparación + Indicadores</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -131,11 +131,7 @@
       if(container){
         container.classList.add("fade-layer");
         setTimeout(()=>container.classList.add("visible"),50);
-        setTimeout(()=>{
-          map.removeLayer(satelliteLayer);
-          satelliteLayer=nextLayer;
-          updateIndicatorLayers(dateStr);
-        },1500);
+        setTimeout(()=>{ map.removeLayer(satelliteLayer); satelliteLayer=nextLayer; updateIndicatorLayers(dateStr); },1500);
       } else {
         map.removeLayer(satelliteLayer);
         satelliteLayer=nextLayer;
@@ -157,12 +153,8 @@
       }
     });
 
-    compareBtn.addEventListener("click",()=>{
-      comparePanel.style.display=comparePanel.style.display==="none"?"block":"none";
-    });
-    closeCompare.addEventListener("click",()=>{
-      comparePanel.style.display="none";
-    });
+    compareBtn.addEventListener("click",()=>{ comparePanel.style.display=comparePanel.style.display==="none"?"block":"none"; });
+    closeCompare.addEventListener("click",()=>{ comparePanel.style.display="none"; });
 
     const startDate=document.getElementById("startDate");
     const endDate=document.getElementById("endDate");
@@ -195,73 +187,67 @@
       dateLabel.style.display="none";
     });
 
-// ---- Indicadores funcionales ----
-const validIndicators = [
-  { id: "OMPS_AI_L3_1day", name: "Aerosoles UV (OMPS AI)", level: "GoogleMapsCompatible_Level6", format: "png" },
-  { id: "OMI_NO2_Column_Amount_Tropospheric", name: "Dióxido de nitrógeno (NO₂)", level: "GoogleMapsCompatible_Level6", format: "png" },
-  { id: "OMI_SO2_Column_Amount_Day", name: "Dióxido de azufre (SO₂)", level: "GoogleMapsCompatible_Level6", format: "png" },
-  { id: "OMI_Ozone_Column_Amount", name: "Ozono total (O₃)", level: "GoogleMapsCompatible_Level6", format: "png" },
-  { id: "FIRMS_VIIRS_SNPP_Night", name: "Focos de calor (VIIRS)", level: "GoogleMapsCompatible_Level6", format: "png" }
-];
+    // ---- Indicadores funcionales ----
+    const validIndicators = [
+      { id: "OMPS_AI_L3_1day", name: "Aerosoles UV (OMPS AI)" },
+      { id: "OMI_NO2_Column_Amount_Tropospheric", name: "Dióxido de nitrógeno (NO₂)" },
+      { id: "OMI_SO2_Column_Amount_Day", name: "Dióxido de azufre (SO₂)" },
+      { id: "OMI_Ozone_Column_Amount", name: "Ozono total (O₃)" },
+      { id: "FIRMS_VIIRS_SNPP_Night", name: "Focos de calor (VIIRS)" }
+    ];
 
-const list = document.getElementById("indicatorsList");
-const indicatorLayers = {};
+    const list = document.getElementById("indicatorsList");
+    const indicatorLayers = {};
 
-validIndicators.forEach(ind => {
-  const div = document.createElement("div");
-  div.className = "indicator-item";
-  div.innerHTML = `<label><input type="checkbox" id="${ind.id}"> ${ind.name}</label>
-                   <div class="legend">🛰️ ${ind.id}</div>`;
-  list.appendChild(div);
-  const checkbox = div.querySelector("input");
+    validIndicators.forEach(ind => {
+      const div = document.createElement("div");
+      div.className = "indicator-item";
+      div.innerHTML = `<label><input type="checkbox" id="${ind.id}"> ${ind.name}</label>
+                       <div class="legend">🛰️ ${ind.id}</div>`;
+      list.appendChild(div);
 
-  checkbox.addEventListener("change", e => {
-    const date = datePicker.value || todayStr;
-    const id = ind.id;
+      const checkbox = div.querySelector("input");
+      checkbox.addEventListener("change", e => {
+        const date = datePicker.value || todayStr;
+        const id = ind.id;
 
-    if (e.target.checked) {
-      // Quitar capa satelital si es el primer indicador
-      if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
+        if (e.target.checked) {
+          if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
+          indicatorLayers[id] = L.tileLayer(
+            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+            { maxZoom: 9, opacity: 1, attribution: "NASA GIBS" }
+          ).addTo(map);
+        } else if (indicatorLayers[id]) {
+          map.removeLayer(indicatorLayers[id]);
+          delete indicatorLayers[id];
+          if (Object.keys(indicatorLayers).length === 0 && !map.hasLayer(satelliteLayer)) {
+            map.addLayer(satelliteLayer);
+          }
+        }
+      });
+    });
 
-      // Crear capa específica del indicador
-      indicatorLayers[id] = L.tileLayer(
-        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${date}/${ind.level}/{z}/{y}/{x}.${ind.format}`,
-        { maxZoom: 7, opacity: 1, attribution: "NASA GIBS" }
-      ).addTo(map);
-
-    } else if (indicatorLayers[id]) {
-      map.removeLayer(indicatorLayers[id]);
-      delete indicatorLayers[id];
-      if (Object.keys(indicatorLayers).length === 0 && !map.hasLayer(satelliteLayer)) {
+    function updateIndicatorLayers(dateStr) {
+      if (Object.keys(indicatorLayers).length > 0) {
+        for (const id in indicatorLayers) {
+          if (map.hasLayer(indicatorLayers[id])) {
+            map.removeLayer(indicatorLayers[id]);
+            indicatorLayers[id] = L.tileLayer(
+              `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+              { maxZoom: 9, opacity: 1, attribution: "NASA GIBS" }
+            ).addTo(map);
+          }
+        }
+      } else if (!map.hasLayer(satelliteLayer)) {
         map.addLayer(satelliteLayer);
       }
     }
-  });
-});
 
-function updateIndicatorLayers(dateStr) {
-  if (Object.keys(indicatorLayers).length > 0) {
-    for (const id in indicatorLayers) {
-      if (map.hasLayer(indicatorLayers[id])) {
-        map.removeLayer(indicatorLayers[id]);
-        const ind = validIndicators.find(v => v.id === id);
-        indicatorLayers[id] = L.tileLayer(
-          `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/${ind.level}/{z}/{y}/{x}.${ind.format}`,
-          { maxZoom: 7, opacity: 1, attribution: "NASA GIBS" }
-        ).addTo(map);
-      }
-    }
-  } else if (!map.hasLayer(satelliteLayer)) {
-    map.addLayer(satelliteLayer);
-  }
-}
-
-    indicatorsBtn.addEventListener("click",()=>{
-      indicatorsPanel.style.display=indicatorsPanel.style.display==="none"?"block":"none";
-    });
+    indicatorsBtn.addEventListener("click",()=>{ indicatorsPanel.style.display=indicatorsPanel.style.display==="none"?"block":"none"; });
 
   })();
   </script>
 </body>
 </html>
+
 

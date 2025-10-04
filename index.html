@@ -6,31 +6,49 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    html,body,#map {height:100%;margin:0;padding:0}
-    .custom-button {
-      position:absolute;
-      top:10px;
-      left:10px;
-      z-index:1000;
-      background:white;
-      padding:6px 12px;
-      border:1px solid #ccc;
-      border-radius:4px;
-      cursor:pointer;
-      font-family:sans-serif;
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+
+    /* Botones flotantes */
+    .controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .custom-button, .date-input {
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-family: sans-serif;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+
+    .date-input {
+      width: 150px;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
-  <button class="custom-button" id="toggleBtn">Ver Calles</button>
+
+  <div class="controls">
+    <input type="date" id="datePicker" class="date-input" />
+    <button class="custom-button" id="toggleBtn">Ver Calles</button>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
   (async function(){
 
-    // ---- Funciones utilitarias ----
+    // ---- Funciones ----
     function formatLocalDate(d){
       const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${day}`;
@@ -39,38 +57,63 @@
     // ---- Configuración ----
     const mapCenter = [-9.2, -75.0]; // Perú
     const initialZoom = 4;
-    const todayStr = formatLocalDate(new Date());
+    const today = new Date();
+    const todayStr = formatLocalDate(today);
 
-    // Capas base
-    const modis = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${todayStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
-      { maxZoom: 9, attribution: "NASA MODIS Aqua TrueColor" }
-    );
+    // Inicializar mapa vacío
+    const map = L.map("map", {
+      center: mapCenter,
+      zoom: initialZoom
+    });
 
-    const viirs = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_At_Sensor_Radiance/default/${todayStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-      { maxZoom: 8, attribution: "NASA VIIRS NOAA-20 Day/Night Band Radiance" }
-    );
+    // ---- Capas base ----
+    function createLayers(dateStr) {
+      const modis = L.tileLayer(
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
+        { maxZoom: 9, attribution: "NASA MODIS Aqua TrueColor" }
+      );
 
+      const viirs = L.tileLayer(
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_At_Sensor_Radiance/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+        { maxZoom: 8, attribution: "NASA VIIRS NOAA-20 Day/Night Band Radiance" }
+      );
+
+      return { modis, viirs };
+    }
+
+    let { modis, viirs } = createLayers(todayStr);
     const streets = L.tileLayer(
       "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
       { maxZoom: 19, attribution: "© OpenStreetMap contributors" }
     );
 
-    // Selección día/noche
+    // Capa inicial según hora
     const hour = new Date().getHours();
     let satelliteLayer = (hour >= 6 && hour < 18) ? modis : viirs;
-
-    // Crear mapa con la capa satelital inicial
-    const map = L.map("map", {
-      center: mapCenter,
-      zoom: initialZoom,
-      layers: [satelliteLayer]
-    });
+    satelliteLayer.addTo(map);
 
     let showingStreets = false;
     const btn = document.getElementById("toggleBtn");
+    const datePicker = document.getElementById("datePicker");
 
+    // ---- Configurar calendario ----
+    datePicker.value = todayStr;
+    datePicker.max = todayStr;
+    datePicker.addEventListener("change", function(){
+      const selectedDate = this.value;
+      if (!selectedDate) return;
+
+      // Quitar capa anterior
+      map.removeLayer(satelliteLayer);
+
+      // Crear nuevas capas para la fecha seleccionada
+      const newLayers = createLayers(selectedDate);
+      satelliteLayer = (hour >= 6 && hour < 18) ? newLayers.modis : newLayers.viirs;
+      
+      if (!showingStreets) satelliteLayer.addTo(map);
+    });
+
+    // ---- Botón Ver Calles / Ver Satélite ----
     btn.addEventListener("click", function(){
       if (showingStreets){
         map.removeLayer(streets);
@@ -89,5 +132,4 @@
   </script>
 </body>
 </html>
-
 

@@ -21,15 +21,16 @@
     .compare-panel {
       position:absolute; top:60px; right:10px;
       background:white; border:1px solid #ccc; border-radius:8px;
-      padding:10px; width:220px; font-family:sans-serif;
+      padding:10px; width:230px; font-family:sans-serif;
       box-shadow:0 2px 6px rgba(0,0,0,0.3); display:none; z-index:1100;
     }
-    .compare-panel h4 { margin:0 0 10px; text-align:center; font-size:15px; }
-    .close-btn {
-      position:absolute; top:5px; right:8px;
-      background:none; border:none; font-size:16px; cursor:pointer; color:#666;
+    .compare-panel h4 {
+      margin:0 0 8px; text-align:center; font-size:15px;
     }
-    .close-btn:hover { color:#000; }
+    .compare-close {
+      position:absolute; top:5px; right:8px; background:#eee; border:none;
+      border-radius:50%; width:22px; height:22px; cursor:pointer; font-weight:bold;
+    }
 
     .indicators-panel {
       position:absolute; top:60px; left:10px;
@@ -48,13 +49,13 @@
       padding:6px 12px; border-radius:6px; font-family:sans-serif;
       font-size:14px; display:none; z-index:1200;
     }
-
     .fade-layer { opacity:0; transition:opacity 1.5s ease; }
     .fade-layer.visible { opacity:1; }
   </style>
 </head>
 <body>
   <div id="map"></div>
+
   <div class="controls">
     <input type="date" id="datePicker" class="date-input" />
     <button class="custom-button" id="toggleBtn">Ver Calles</button>
@@ -63,7 +64,7 @@
   </div>
 
   <div class="compare-panel" id="comparePanel">
-    <button class="close-btn" id="closeCompare">✖</button>
+    <button class="compare-close" id="closeCompare">×</button>
     <h4>Comparación</h4>
     <label>Fecha inicial:</label>
     <input type="date" id="startDate" style="width:100%; margin-bottom:8px;">
@@ -79,6 +80,7 @@
   </div>
 
   <div class="date-label" id="dateLabel"></div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
   (async function(){
@@ -97,12 +99,11 @@
     const todayStr=formatLocalDate(new Date());
     const hour=new Date().getHours();
 
-    // ---- Capas base ----
     function createLayers(dateStr){
-      const modis=L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
-        {maxZoom:9,attribution:"NASA MODIS Aqua"});
-      const viirs=L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_At_Sensor_Radiance/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-        {maxZoom:8,attribution:"NASA VIIRS"});
+      const modis=L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
+        {maxZoom:9,attribution:"NASA MODIS Terra"});
+      const viirs=L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_At_Sensor_Radiance_500m/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+        {maxZoom:8,attribution:"NASA VIIRS Night Band"});
       return {modis,viirs};
     }
 
@@ -114,9 +115,9 @@
     const btn=document.getElementById("toggleBtn");
     const datePicker=document.getElementById("datePicker");
     const compareBtn=document.getElementById("compareBtn");
-    const closeCompare=document.getElementById("closeCompare");
     const indicatorsBtn=document.getElementById("indicatorsBtn");
     const comparePanel=document.getElementById("comparePanel");
+    const closeCompare=document.getElementById("closeCompare");
     const indicatorsPanel=document.getElementById("indicatorsPanel");
     const dateLabel=document.getElementById("dateLabel");
     datePicker.value=todayStr; datePicker.max=todayStr;
@@ -135,7 +136,7 @@
           satelliteLayer=nextLayer;
           updateIndicatorLayers(dateStr);
         },1500);
-      }else{
+      } else {
         map.removeLayer(satelliteLayer);
         satelliteLayer=nextLayer;
         updateIndicatorLayers(dateStr);
@@ -159,7 +160,9 @@
     compareBtn.addEventListener("click",()=>{
       comparePanel.style.display=comparePanel.style.display==="none"?"block":"none";
     });
-    closeCompare.addEventListener("click",()=>{ comparePanel.style.display="none"; });
+    closeCompare.addEventListener("click",()=>{
+      comparePanel.style.display="none";
+    });
 
     const startDate=document.getElementById("startDate");
     const endDate=document.getElementById("endDate");
@@ -183,30 +186,24 @@
         dateLabel.textContent=`📅 ${d}`;
         index=(index+1)%dates.length;
       }
-      animate(); animationTimer=setInterval(animate,2000);
+      animate(); animationTimer=setInterval(animate,2200);
     });
 
     stopCompare.addEventListener("click",()=>{
       if(animationTimer) clearInterval(animationTimer);
       animationTimer=null; startCompare.disabled=false; stopCompare.disabled=true;
-      dateLabel.style.display="none"; comparePanel.style.display="none";
+      dateLabel.style.display="none";
     });
 
-    // ---- Indicadores ----
+    // ---- Indicadores funcionales ----
     const validIndicators=[
-      {id:"OMPS_AI_L2_V8_Green",name:"Aerosoles (UVAI OMPS)"},
-      {id:"OMI_NO2_Column_Amount_Tropospheric",name:"Dióxido de nitrógeno (NO₂)"},
-      {id:"OMI_SO2_Column_Amount",name:"Dióxido de azufre (SO₂)"},
-      {id:"OMI_Ozone_Column_Amount",name:"Ozono total (O₃)"},
-      {id:"FIRMS_VIIRS_SNPP_Night",name:"Focos de calor (VIIRS)"}
+      {id:"OMPS_AI_L3_1day", name:"Aerosoles UV (OMPS AI)"},
+      {id:"OMI_NO2_Column_Amount_Tropospheric", name:"Dióxido de nitrógeno (NO₂)"},
+      {id:"OMI_SO2_Column_Amount_Day", name:"Dióxido de azufre (SO₂)"},
+      {id:"OMI_Ozone_Column_Amount", name:"Ozono total (O₃)"},
+      {id:"FIRMS_VIIRS_SNPP_Night", name:"Focos de calor (VIIRS)"}
     ];
-    const resolutions={
-      OMPS_AI_L2_V8_Green:"2km",
-      OMI_NO2_Column_Amount_Tropospheric:"2km",
-      OMI_SO2_Column_Amount:"2km",
-      OMI_Ozone_Column_Amount:"2km",
-      FIRMS_VIIRS_SNPP_Night:"500m"
-    };
+
     const list=document.getElementById("indicatorsList");
     const indicatorLayers={};
 
@@ -214,18 +211,18 @@
       const div=document.createElement("div");
       div.className="indicator-item";
       div.innerHTML=`<label><input type="checkbox" id="${ind.id}"> ${ind.name}</label>
-                     <div class="legend">🗺️ ${ind.id}</div>`;
+                     <div class="legend">🛰️ ${ind.id}</div>`;
       list.appendChild(div);
       const checkbox=div.querySelector("input");
       checkbox.addEventListener("change",e=>{
         const date=datePicker.value||todayStr;
         if(e.target.checked){
           indicatorLayers[ind.id]=L.tileLayer(
-            `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/${ind.id}/default/${date}/${resolutions[ind.id]}/{z}/{y}/{x}.png`,
-            {maxZoom:7,opacity:0.7,attribution:"NASA GIBS"}
+            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${ind.id}/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+            {maxZoom:8,opacity:0.7,attribution:"NASA GIBS"}
           ).addTo(map);
-        } else {
-          if(indicatorLayers[ind.id]) map.removeLayer(indicatorLayers[ind.id]);
+        } else if(indicatorLayers[ind.id]){
+          map.removeLayer(indicatorLayers[ind.id]);
         }
       });
     });
@@ -235,8 +232,8 @@
         if(map.hasLayer(indicatorLayers[id])){
           map.removeLayer(indicatorLayers[id]);
           indicatorLayers[id]=L.tileLayer(
-            `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/${id}/default/${dateStr}/${resolutions[id]}/{z}/{y}/{x}.png`,
-            {maxZoom:7,opacity:0.7,attribution:"NASA GIBS"}
+            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+            {maxZoom:8,opacity:0.7,attribution:"NASA GIBS"}
           ).addTo(map);
         }
       }
@@ -250,3 +247,4 @@
   </script>
 </body>
 </html>
+

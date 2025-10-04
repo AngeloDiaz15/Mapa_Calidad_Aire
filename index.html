@@ -10,7 +10,7 @@
     .custom-button {
       position:absolute;
       top:10px;
-      right:10px; /* 🔹 ahora en la esquina superior derecha */
+      left:10px;
       z-index:1000;
       background:white;
       padding:6px 12px;
@@ -30,6 +30,7 @@
   <script>
   (async function(){
 
+    // ---- Funciones utilitarias ----
     function formatLocalDate(d){
       const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${day}`;
@@ -45,6 +46,7 @@
     }
 
     async function getValidDate(layerName, ext='jpg', z=2, lon=0, lat=0){
+      // calcular tile para prueba
       const xtile = Math.floor((lon + 180) / 360 * Math.pow(2, z));
       const latRad = lat * Math.PI / 180;
       const ytile = Math.floor((1 - Math.log(Math.tan(latRad) + 1/Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z));
@@ -59,18 +61,21 @@
       const urlY = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${dY}/GoogleMapsCompatible_Level9/${z}/${ytile}/${xtile}.${ext}`;
       if (await tileExists(urlY)) return dY;
 
-      return dToday;
+      return dToday; // fallback
     }
 
+    // ---- Configuración ----
     const mapCenter = [-9.2, -75.0]; // Perú
     const initialZoom = 4;
 
     const modisLayerName = "MODIS_Aqua_CorrectedReflectance_TrueColor";
     const viirsLayerName = "VIIRS_SNPP_DayNightBand_At_Sensor_Radiance";
 
+    // Fechas válidas
     const modisDate = await getValidDate(modisLayerName, "jpg", 2, mapCenter[1], mapCenter[0]);
     const viirsDate = await getValidDate(viirsLayerName, "png", 2, mapCenter[1], mapCenter[0]);
 
+    // Capas base
     const modis = L.tileLayer(
       `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${modisLayerName}/default/${modisDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
       { maxZoom: 9, attribution: "NASA MODIS Aqua TrueColor" }
@@ -86,9 +91,11 @@
       { maxZoom: 19, attribution: "© OpenStreetMap contributors" }
     );
 
+    // Selección día/noche según hora local (6am-6pm día, resto noche)
     const hour = new Date().getHours();
     let satelliteLayer = (hour >= 6 && hour < 18) ? modis : viirs;
 
+    // Crear mapa con la capa satelital inicial
     const map = L.map("map", {
       center: mapCenter,
       zoom: initialZoom,
@@ -116,5 +123,4 @@
   </script>
 </body>
 </html>
-
 

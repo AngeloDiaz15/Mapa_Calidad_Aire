@@ -46,10 +46,11 @@
       display: none;
       z-index: 1100;
       width: 220px;
+      box-sizing: border-box;
     }
 
     .compare-panel h4 {
-      margin: 0 0 6px;
+      margin: 0 0 10px;
       font-size: 15px;
       text-align: center;
     }
@@ -60,13 +61,15 @@
     /* Botón cerrar (X) */
     .close-btn {
       position: absolute;
-      top: 5px;
+      top: 6px;
       right: 8px;
       background: none;
       border: none;
-      font-size: 16px;
+      font-size: 18px;
+      font-weight: bold;
       cursor: pointer;
-      color: #666;
+      color: #888;
+      line-height: 1;
     }
     .close-btn:hover { color: #000; }
 
@@ -138,8 +141,8 @@
     }
 
     // ---- Configuración inicial ----
-    const mapCenter = [-9.2, -75.0];
-    const initialZoom = 4;
+    const mapCenter = [0, 0]; // 🌍 Vista global
+    const initialZoom = 2;
     const today = new Date();
     const todayStr = formatLocalDate(today);
     const hour = new Date().getHours();
@@ -182,9 +185,7 @@
     async function fadeToNewLayer(dateStr) {
       const newLayers = createLayers(dateStr);
       const nextLayer = (hour >= 6 && hour < 18) ? newLayers.modis : newLayers.viirs;
-      nextLayer.getContainer?.()?.classList?.add("fade-layer");
       nextLayer.addTo(map);
-
       const container = nextLayer.getContainer?.();
       if (container) {
         container.classList.add("fade-layer");
@@ -272,9 +273,10 @@
       startCompare.disabled = false;
       stopCompare.disabled = true;
       dateLabel.style.display = "none";
-      comparePanel.style.display = "none"; // 🔹 se cierra al detener
+      comparePanel.style.display = "none";
     });
   })();
   </script>
 </body>
 </html>
+

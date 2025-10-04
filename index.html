@@ -36,53 +36,19 @@
       return `${y}-${m}-${day}`;
     }
 
-    async function tileExists(url){
-      try {
-        const res = await fetch(url, { method:'HEAD', mode:'cors' });
-        return res.ok;
-      } catch(e){
-        return false;
-      }
-    }
-
-    async function getValidDate(layerName, ext='jpg', z=2, lon=0, lat=0){
-      // calcular tile para prueba
-      const xtile = Math.floor((lon + 180) / 360 * Math.pow(2, z));
-      const latRad = lat * Math.PI / 180;
-      const ytile = Math.floor((1 - Math.log(Math.tan(latRad) + 1/Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z));
-
-      const today = new Date();
-      const dToday = formatLocalDate(today);
-      const urlToday = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${dToday}/GoogleMapsCompatible_Level9/${z}/${ytile}/${xtile}.${ext}`;
-      if (await tileExists(urlToday)) return dToday;
-
-      const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1);
-      const dY = formatLocalDate(yesterday);
-      const urlY = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${dY}/GoogleMapsCompatible_Level9/${z}/${ytile}/${xtile}.${ext}`;
-      if (await tileExists(urlY)) return dY;
-
-      return dToday; // fallback
-    }
-
     // ---- Configuración ----
     const mapCenter = [-9.2, -75.0]; // Perú
     const initialZoom = 4;
-
-    const modisLayerName = "MODIS_Aqua_CorrectedReflectance_TrueColor";
-    const viirsLayerName = "VIIRS_SNPP_DayNightBand_At_Sensor_Radiance";
-
-    // Fechas válidas
-    const modisDate = await getValidDate(modisLayerName, "jpg", 2, mapCenter[1], mapCenter[0]);
-    const viirsDate = await getValidDate(viirsLayerName, "png", 2, mapCenter[1], mapCenter[0]);
+    const todayStr = formatLocalDate(new Date());
 
     // Capas base
     const modis = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${modisLayerName}/default/${modisDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
+      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${todayStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
       { maxZoom: 9, attribution: "NASA MODIS Aqua TrueColor" }
     );
 
     const viirs = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${viirsLayerName}/default/${viirsDate}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_At_Sensor_Radiance/default/${todayStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
       { maxZoom: 8, attribution: "NASA VIIRS NOAA-20 Day/Night Band Radiance" }
     );
 
@@ -91,7 +57,7 @@
       { maxZoom: 19, attribution: "© OpenStreetMap contributors" }
     );
 
-    // Selección día/noche según hora local (6am-6pm día, resto noche)
+    // Selección día/noche
     const hour = new Date().getHours();
     let satelliteLayer = (hour >= 6 && hour < 18) ? modis : viirs;
 
@@ -123,4 +89,5 @@
   </script>
 </body>
 </html>
+
 

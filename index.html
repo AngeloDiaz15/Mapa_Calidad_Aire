@@ -2,13 +2,13 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Mapa Satélite (MODIS/VIIRS) + Calles</title>
+  <title>Mapa Satélite (MODIS/VIIRS) + Calles + Comparación</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     html, body, #map { height: 100%; margin: 0; padding: 0; }
 
-    /* Botones flotantes */
+    /* Controles principales */
     .controls {
       position: absolute;
       top: 10px;
@@ -30,9 +30,27 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.3);
     }
 
-    .date-input {
-      width: 150px;
+    .date-input { width: 150px; }
+
+    /* Panel de comparación */
+    .compare-panel {
+      position: absolute;
+      top: 60px;
+      right: 10px;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 10px;
+      font-family: sans-serif;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      display: none;
+      z-index: 1100;
+      width: 200px;
     }
+
+    .compare-panel h4 { margin: 0 0 6px; font-size: 15px; text-align: center; }
+    .compare-panel input { width: 100%; margin-bottom: 8px; }
+    .compare-panel button { width: 100%; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -41,17 +59,37 @@
   <div class="controls">
     <input type="date" id="datePicker" class="date-input" />
     <button class="custom-button" id="toggleBtn">Ver Calles</button>
+    <button class="custom-button" id="compareBtn">Comparar Fechas</button>
+  </div>
+
+  <div class="compare-panel" id="comparePanel">
+    <h4>Comparación</h4>
+    <label>Fecha inicial:</label>
+    <input type="date" id="startDate">
+    <label>Fecha final:</label>
+    <input type="date" id="endDate">
+    <button id="startCompare" class="custom-button">Iniciar animación</button>
+    <button id="stopCompare" class="custom-button">Detener</button>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
   (async function(){
-
     // ---- Funciones ----
     function formatLocalDate(d){
       const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${day}`;
+    }
+
+    function dateRange(start, end) {
+      const result = [];
+      let current = new Date(start);
+      while (current <= end) {
+        result.push(formatLocalDate(current));
+        current.setDate(current.getDate() + 1);
+      }
+      return result;
     }
 
     // ---- Configuración ----
@@ -59,14 +97,14 @@
     const initialZoom = 4;
     const today = new Date();
     const todayStr = formatLocalDate(today);
+    const hour = new Date().getHours();
 
-    // Inicializar mapa vacío
     const map = L.map("map", {
       center: mapCenter,
       zoom: initialZoom
     });
 
-    // ---- Capas base ----
+    // ---- Crear capas ----
     function createLayers(dateStr) {
       const modis = L.tileLayer(
         `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
@@ -81,39 +119,37 @@
       return { modis, viirs };
     }
 
+    // Capas iniciales
     let { modis, viirs } = createLayers(todayStr);
     const streets = L.tileLayer(
       "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
       { maxZoom: 19, attribution: "© OpenStreetMap contributors" }
     );
 
-    // Capa inicial según hora
-    const hour = new Date().getHours();
     let satelliteLayer = (hour >= 6 && hour < 18) ? modis : viirs;
     satelliteLayer.addTo(map);
 
+    // ---- Controles ----
     let showingStreets = false;
     const btn = document.getElementById("toggleBtn");
     const datePicker = document.getElementById("datePicker");
+    const compareBtn = document.getElementById("compareBtn");
+    const comparePanel = document.getElementById("comparePanel");
 
-    // ---- Configurar calendario ----
     datePicker.value = todayStr;
     datePicker.max = todayStr;
+
+    // ---- Cambiar fecha manual ----
     datePicker.addEventListener("change", function(){
       const selectedDate = this.value;
       if (!selectedDate) return;
-
-      // Quitar capa anterior
       map.removeLayer(satelliteLayer);
-
-      // Crear nuevas capas para la fecha seleccionada
       const newLayers = createLayers(selectedDate);
       satelliteLayer = (hour >= 6 && hour < 18) ? newLayers.modis : newLayers.viirs;
-      
       if (!showingStreets) satelliteLayer.addTo(map);
     });
 
-    // ---- Botón Ver Calles / Ver Satélite ----
+    // ---- Alternar calles / satélite ----
     btn.addEventListener("click", function(){
       if (showingStreets){
         map.removeLayer(streets);
@@ -128,8 +164,65 @@
       }
     });
 
+    // ---- Panel de comparación ----
+    compareBtn.addEventListener("click", () => {
+      comparePanel.style.display = comparePanel.style.display === "none" ? "block" : "none";
+    });
+
+    const startDate = document.getElementById("startDate");
+    const endDate = document.getElementById("endDate");
+    const startCompare = document.getElementById("startCompare");
+    const stopCompare = document.getElementById("stopCompare");
+
+    let animationTimer = null;
+    stopCompare.disabled = true;
+
+    startCompare.addEventListener("click", () => {
+      if (!startDate.value || !endDate.value) {
+        alert("Seleccione ambas fechas.");
+        return;
+      }
+
+      const start = new Date(startDate.value);
+      const end = new Date(endDate.value);
+      const diffDays = (end - start) / (1000*60*60*24);
+
+      if (diffDays < 0) {
+        alert("La fecha final debe ser posterior a la inicial.");
+        return;
+      }
+      if (diffDays > 30) {
+        alert("El rango máximo permitido es de 30 días.");
+        return;
+      }
+
+      const dates = dateRange(start, end);
+      let index = 0;
+
+      stopCompare.disabled = false;
+      startCompare.disabled = true;
+
+      function animate() {
+        if (index >= dates.length) index = 0; // Repetir animación
+        map.removeLayer(satelliteLayer);
+        const newLayers = createLayers(dates[index]);
+        satelliteLayer = (hour >= 6 && hour < 18) ? newLayers.modis : newLayers.viirs;
+        if (!showingStreets) satelliteLayer.addTo(map);
+        index++;
+      }
+
+      animate();
+      animationTimer = setInterval(animate, 1500); // cambia cada 1.5s
+    });
+
+    stopCompare.addEventListener("click", () => {
+      if (animationTimer) clearInterval(animationTimer);
+      animationTimer = null;
+      startCompare.disabled = false;
+      stopCompare.disabled = true;
+    });
+
   })();
   </script>
 </body>
 </html>
-

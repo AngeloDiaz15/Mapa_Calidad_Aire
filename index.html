@@ -214,30 +214,55 @@
                      <div class="legend">🛰️ ${ind.id}</div>`;
       list.appendChild(div);
       const checkbox=div.querySelector("input");
+
       checkbox.addEventListener("change",e=>{
         const date=datePicker.value||todayStr;
+        const id = ind.id;
+
         if(e.target.checked){
-          indicatorLayers[ind.id]=L.tileLayer(
-            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${ind.id}/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-            {maxZoom:8,opacity:0.7,attribution:"NASA GIBS"}
+          // Si es el primer indicador activado, quitar la capa satelital
+          if(map.hasLayer(satelliteLayer)){
+            map.removeLayer(satelliteLayer);
+          }
+
+          // Crear la capa del indicador y agregarla
+          indicatorLayers[id] = L.tileLayer(
+            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+            {maxZoom:8,opacity:1,attribution:"NASA GIBS"}
           ).addTo(map);
-        } else if(indicatorLayers[ind.id]){
-          map.removeLayer(indicatorLayers[ind.id]);
+        } else if(indicatorLayers[id]){
+          // Quitar la capa desactivada
+          map.removeLayer(indicatorLayers[id]);
+          delete indicatorLayers[id];
+
+          // Si no queda ningún indicador activo, restaurar el satélite
+          if(Object.keys(indicatorLayers).length === 0 && !map.hasLayer(satelliteLayer)){
+            map.addLayer(satelliteLayer);
+          }
         }
       });
     });
 
     function updateIndicatorLayers(dateStr){
-      for(const id in indicatorLayers){
-        if(map.hasLayer(indicatorLayers[id])){
-          map.removeLayer(indicatorLayers[id]);
-          indicatorLayers[id]=L.tileLayer(
-            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-            {maxZoom:8,opacity:0.7,attribution:"NASA GIBS"}
-          ).addTo(map);
+      // Si hay indicadores activos, actualizarlos
+      if(Object.keys(indicatorLayers).length > 0){
+        for(const id in indicatorLayers){
+          if(map.hasLayer(indicatorLayers[id])){
+            map.removeLayer(indicatorLayers[id]);
+            indicatorLayers[id] = L.tileLayer(
+              `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+              {maxZoom:8,opacity:1,attribution:"NASA GIBS"}
+            ).addTo(map);
+          }
+        }
+      } else {
+        // Si no hay indicadores, mantener la imagen satelital actualizada
+        if(!map.hasLayer(satelliteLayer)){
+          map.addLayer(satelliteLayer);
         }
       }
     }
+
 
     indicatorsBtn.addEventListener("click",()=>{
       indicatorsPanel.style.display=indicatorsPanel.style.display==="none"?"block":"none";
@@ -247,5 +272,6 @@
   </script>
 </body>
 </html>
+
 
 

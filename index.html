@@ -2,117 +2,53 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Mapa Satélite (MODIS/VIIRS) + Calles + Comparación + Indicadores</title>
+  <title>Mapa Satélite + Calles + Comparación + Indicadores</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    html, body, #map { height: 100%; margin: 0; padding: 0; }
-
-    /* Controles principales */
+    html, body, #map { height:100%; margin:0; padding:0; }
     .controls {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      position:absolute; top:10px; right:10px;
+      z-index:1000; display:flex; flex-direction:column; gap:8px;
     }
-
     .custom-button, .date-input {
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      font-family: sans-serif;
-      padding: 6px 10px;
-      cursor: pointer;
-      font-size: 14px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      background:white; border:1px solid #ccc; border-radius:6px;
+      font-family:sans-serif; padding:6px 10px; cursor:pointer;
+      font-size:14px; box-shadow:0 1px 4px rgba(0,0,0,0.3);
     }
+    .date-input { width:150px; }
 
-    .date-input { width: 150px; }
-
-    /* Panel de comparación */
     .compare-panel {
-      position: absolute;
-      top: 60px;
-      right: 10px;
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      padding: 10px;
-      font-family: sans-serif;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      display: none;
-      z-index: 1100;
-      width: 220px;
+      position:absolute; top:60px; right:10px;
+      background:white; border:1px solid #ccc; border-radius:8px;
+      padding:10px; width:220px; font-family:sans-serif;
+      box-shadow:0 2px 6px rgba(0,0,0,0.3); display:none; z-index:1100;
     }
+    .compare-panel h4 { margin:0 0 10px; text-align:center; font-size:15px; }
 
-    .compare-panel h4 {
-      margin: 0 0 10px;
-      font-size: 15px;
-      text-align: center;
-    }
-
-    /* Panel de indicadores */
     .indicators-panel {
-      position: absolute;
-      top: 60px;
-      left: 10px;
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      padding: 10px;
-      font-family: sans-serif;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      display: none;
-      z-index: 1100;
-      width: 300px;
-      max-height: 80%;
-      overflow-y: auto;
+      position:absolute; top:60px; left:10px;
+      background:white; border:1px solid #ccc; border-radius:8px;
+      padding:10px; width:280px; max-height:80%; overflow-y:auto;
+      font-family:sans-serif; box-shadow:0 2px 6px rgba(0,0,0,0.3);
+      display:none; z-index:1100;
     }
+    .indicators-panel h4 { margin-top:0; text-align:center; }
+    .indicator-item { margin-bottom:10px; }
+    .legend { font-size:12px; color:#555; margin-left:20px; }
 
-    .indicators-panel h4 {
-      text-align: center;
-      margin-top: 0;
-    }
-
-    .indicator-item {
-      margin-bottom: 8px;
-    }
-
-    .legend {
-      font-size: 12px;
-      color: #444;
-      margin-left: 20px;
-    }
-
-    /* Indicador de fecha actual */
     .date-label {
-      position: absolute;
-      bottom: 15px;
-      right: 15px;
-      background: rgba(0,0,0,0.6);
-      color: white;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-family: sans-serif;
-      font-size: 14px;
-      z-index: 1200;
-      display: none;
+      position:absolute; bottom:15px; right:15px;
+      background:rgba(0,0,0,0.6); color:white;
+      padding:6px 12px; border-radius:6px; font-family:sans-serif;
+      font-size:14px; display:none; z-index:1200;
     }
-
-    /* Animación de desvanecimiento */
-    .fade-layer {
-      opacity: 0;
-      transition: opacity 1.5s ease;
-    }
-    .fade-layer.visible { opacity: 1; }
+    .fade-layer { opacity:0; transition:opacity 1.5s ease; }
+    .fade-layer.visible { opacity:1; }
   </style>
 </head>
 <body>
   <div id="map"></div>
-
   <div class="controls">
     <input type="date" id="datePicker" class="date-input" />
     <button class="custom-button" id="toggleBtn">Ver Calles</button>
@@ -128,7 +64,6 @@
     <input type="date" id="endDate" style="width:100%; margin-bottom:8px;">
     <button id="startCompare" class="custom-button">Iniciar animación</button>
     <button id="stopCompare" class="custom-button">Detener</button>
-    <button id="closeCompare" class="custom-button" style="background:#f8d7da;">❌ Cerrar</button>
   </div>
 
   <div class="indicators-panel" id="indicatorsPanel">
@@ -137,7 +72,6 @@
   </div>
 
   <div class="date-label" id="dateLabel"></div>
-
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
   (async function(){
@@ -145,208 +79,159 @@
       const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${day}`;
     }
-
-    function dateRange(start, end) {
-      const result = [];
-      let current = new Date(start);
-      while (current <= end) {
-        result.push(formatLocalDate(current));
-        current.setDate(current.getDate() + 1);
-      }
+    function dateRange(start,end){
+      const result=[]; let c=new Date(start);
+      while(c<=end){result.push(formatLocalDate(c)); c.setDate(c.getDate()+1);}
       return result;
     }
 
-    const mapCenter = [-9.2, -75];
-    const map = L.map("map", { center: mapCenter, zoom: 4 });
+    const mapCenter=[-9.2,-75];
+    const map=L.map("map",{center:mapCenter,zoom:4});
+    const todayStr=formatLocalDate(new Date());
+    const hour=new Date().getHours();
 
-    const today = new Date();
-    const todayStr = formatLocalDate(today);
-    const hour = new Date().getHours();
-
-    // ---------------- CAPAS BASE ----------------
-    function createLayers(dateStr) {
-      const modis = L.tileLayer(
-        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
-        { maxZoom: 9, attribution: "NASA MODIS Aqua TrueColor" }
-      );
-      const viirs = L.tileLayer(
-        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_At_Sensor_Radiance/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-        { maxZoom: 8, attribution: "NASA VIIRS DNB" }
-      );
-      return { modis, viirs };
+    // ---- Capas base ----
+    function createLayers(dateStr){
+      const modis=L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
+        {maxZoom:9,attribution:"NASA MODIS Aqua"});
+      const viirs=L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_At_Sensor_Radiance/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+        {maxZoom:8,attribution:"NASA VIIRS"});
+      return {modis,viirs};
     }
 
-    let { modis, viirs } = createLayers(todayStr);
-    const streets = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
-    let satelliteLayer = (hour >= 6 && hour < 18) ? modis : viirs;
+    let {modis,viirs}=createLayers(todayStr);
+    const streets=L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19});
+    let satelliteLayer=(hour>=6&&hour<18)?modis:viirs;
     satelliteLayer.addTo(map);
 
-    const btn = document.getElementById("toggleBtn");
-    const datePicker = document.getElementById("datePicker");
-    const compareBtn = document.getElementById("compareBtn");
-    const indicatorsBtn = document.getElementById("indicatorsBtn");
-    const comparePanel = document.getElementById("comparePanel");
-    const closeCompare = document.getElementById("closeCompare");
-    const indicatorsPanel = document.getElementById("indicatorsPanel");
-    const dateLabel = document.getElementById("dateLabel");
-    datePicker.value = todayStr;
-    datePicker.max = todayStr;
+    const btn=document.getElementById("toggleBtn");
+    const datePicker=document.getElementById("datePicker");
+    const compareBtn=document.getElementById("compareBtn");
+    const indicatorsBtn=document.getElementById("indicatorsBtn");
+    const comparePanel=document.getElementById("comparePanel");
+    const indicatorsPanel=document.getElementById("indicatorsPanel");
+    const dateLabel=document.getElementById("dateLabel");
+    datePicker.value=todayStr; datePicker.max=todayStr;
+    let showingStreets=false;
 
-    let showingStreets = false;
-
-    // ---------------- ACTUALIZACIÓN DE CAPAS SATÉLITE ----------------
-    async function fadeToNewLayer(dateStr) {
-      const newLayers = createLayers(dateStr);
-      const nextLayer = (hour >= 6 && hour < 18) ? newLayers.modis : newLayers.viirs;
+    async function fadeToNewLayer(dateStr){
+      const newLayers=createLayers(dateStr);
+      const nextLayer=(hour>=6&&hour<18)?newLayers.modis:newLayers.viirs;
       nextLayer.addTo(map);
-      const container = nextLayer.getContainer?.();
-      if (container) {
+      const container=nextLayer.getContainer?.();
+      if(container){
         container.classList.add("fade-layer");
-        setTimeout(() => container.classList.add("visible"), 50);
-        setTimeout(() => {
+        setTimeout(()=>container.classList.add("visible"),50);
+        setTimeout(()=>{
           map.removeLayer(satelliteLayer);
-          satelliteLayer = nextLayer;
+          satelliteLayer=nextLayer;
           updateIndicatorLayers(dateStr);
-        }, 1500);
-      } else {
+        },1500);
+      }else{
         map.removeLayer(satelliteLayer);
-        satelliteLayer = nextLayer;
+        satelliteLayer=nextLayer;
         updateIndicatorLayers(dateStr);
       }
     }
 
-    datePicker.addEventListener("change", function(){
-      if (this.value) fadeToNewLayer(this.value);
+    datePicker.addEventListener("change",function(){
+      if(this.value) fadeToNewLayer(this.value);
     });
 
-    // ---------------- BOTONES ----------------
-    btn.addEventListener("click", function(){
-      if (showingStreets){
-        map.removeLayer(streets);
-        map.addLayer(satelliteLayer);
-        btn.textContent = "Ver Calles";
-        showingStreets = false;
-      } else {
-        map.removeLayer(satelliteLayer);
-        map.addLayer(streets);
-        btn.textContent = "Ver Satélite";
-        showingStreets = true;
+    btn.addEventListener("click",()=>{
+      if(showingStreets){
+        map.removeLayer(streets); map.addLayer(satelliteLayer);
+        btn.textContent="Ver Calles"; showingStreets=false;
+      }else{
+        map.removeLayer(satelliteLayer); map.addLayer(streets);
+        btn.textContent="Ver Satélite"; showingStreets=true;
       }
     });
 
-    compareBtn.addEventListener("click", () => {
-      comparePanel.style.display = comparePanel.style.display === "none" ? "block" : "none";
+    compareBtn.addEventListener("click",()=>{
+      comparePanel.style.display=comparePanel.style.display==="none"?"block":"none";
     });
 
-    closeCompare.addEventListener("click", ()=>{
-      comparePanel.style.display = "none";
-    });
+    const startDate=document.getElementById("startDate");
+    const endDate=document.getElementById("endDate");
+    const startCompare=document.getElementById("startCompare");
+    const stopCompare=document.getElementById("stopCompare");
+    let animationTimer=null;
+    stopCompare.disabled=true;
 
-    // ---------------- ANIMACIÓN DE COMPARACIÓN ----------------
-    const startDate = document.getElementById("startDate");
-    const endDate = document.getElementById("endDate");
-    const startCompare = document.getElementById("startCompare");
-    const stopCompare = document.getElementById("stopCompare");
-    let animationTimer = null;
-    stopCompare.disabled = true;
+    startCompare.addEventListener("click",()=>{
+      if(!startDate.value||!endDate.value){alert("Seleccione ambas fechas.");return;}
+      const start=new Date(startDate.value), end=new Date(endDate.value);
+      if(end<start){alert("La fecha final debe ser posterior.");return;}
+      const diffDays=(end-start)/(1000*60*60*24);
+      if(diffDays>30){alert("Máximo 30 días.");return;}
+      const dates=dateRange(start,end); let index=0;
+      stopCompare.disabled=false; startCompare.disabled=true;
+      dateLabel.style.display="block";
 
-    startCompare.addEventListener("click", () => {
-      if (!startDate.value || !endDate.value) {
-        alert("Seleccione ambas fechas.");
-        return;
+      async function animate(){
+        const d=dates[index]; await fadeToNewLayer(d);
+        dateLabel.textContent=`📅 ${d}`;
+        index=(index+1)%dates.length;
       }
-      const start = new Date(startDate.value);
-      const end = new Date(endDate.value);
-      const diffDays = (end - start) / (1000*60*60*24);
-      if (diffDays < 0) { alert("La fecha final debe ser posterior."); return; }
-      if (diffDays > 30) { alert("Máximo 30 días."); return; }
-
-      const dates = dateRange(start, end);
-      let index = 0;
-      stopCompare.disabled = false;
-      startCompare.disabled = true;
-      dateLabel.style.display = "block";
-
-      async function animate() {
-        const d = dates[index];
-        await fadeToNewLayer(d);
-        dateLabel.textContent = `📅 ${d}`;
-        index = (index + 1) % dates.length;
-      }
-
-      animate();
-      animationTimer = setInterval(animate, 2000);
+      animate(); animationTimer=setInterval(animate,2000);
     });
 
-    stopCompare.addEventListener("click", () => {
-      if (animationTimer) clearInterval(animationTimer);
-      animationTimer = null;
-      startCompare.disabled = false;
-      stopCompare.disabled = true;
-      dateLabel.style.display = "none";
-      comparePanel.style.display = "none";
+    stopCompare.addEventListener("click",()=>{
+      if(animationTimer) clearInterval(animationTimer);
+      animationTimer=null; startCompare.disabled=false; stopCompare.disabled=true;
+      dateLabel.style.display="none"; comparePanel.style.display="none";
     });
 
-    // ---------------- INDICADORES ----------------
-    const indicatorLayers = {};
-    const indicators = [
-      {id:"GHRSST_L4_MUR_Sea_Surface_Temperature", name:"Temperatura superficial del mar"},
-      {id:"AMSRU2_L3_Total_Precipitable_Water_Daily", name:"Agua precipitable total"},
-      {id:"AMSRU2_L3_Ocean_Wind_Speed_Daily", name:"Velocidad del viento oceánico"},
-      {id:"TROPOMI_L2_Sulfur_Dioxide_Total_Vertical_Column_Daily", name:"Dióxido de azufre (SO₂)"},
-      {id:"OCO-3_Carbon_Dioxide_Total_Column_Average", name:"Dióxido de carbono (CO₂)"},
-      {id:"AIRS_L2_Methane_400hPa_Volume_Mixing_Ratio_Day", name:"Metano (día)"},
-      {id:"AIRS_L2_Methane_400hPa_Volume_Mixing_Ratio_Night", name:"Metano (noche)"},
-      {id:"AIRS_L2_Carbon_Monoxide_500hPa_Volume_Mixing_Ratio_Day", name:"Monóxido de carbono (día)"},
-      {id:"AIRS_L2_Carbon_Monoxide_500hPa_Volume_Mixing_Ratio_Night", name:"Monóxido de carbono (noche)"},
-      {id:"TEMPO_L3_Cloud_Cloud_Pressure_Total", name:"Presión de nubes"},
-      {id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"Ozono (troposfera)"},
-      {id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehído (HCHO)"},
-      {id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"Dióxido de nitrógeno (NO₂)"},
-      {id:"AIRS_L2_Surface_Air_Temperature_Day", name:"Temperatura aire (día)"},
-      {id:"AIRS_L2_Surface_Air_Temperature_Night", name:"Temperatura aire (noche)"}
+    // ---- Indicadores ----
+    const validIndicators=[
+      {id:"OMPS_AI_L2_V8_Green",name:"Aerosoles (UVAI OMPS)"},
+      {id:"OMI_NO2_Column_Amount_Tropospheric",name:"Dióxido de nitrógeno (NO₂)"},
+      {id:"OMI_SO2_Column_Amount",name:"Dióxido de azufre (SO₂)"},
+      {id:"OMI_Ozone_Column_Amount",name:"Ozono total (O₃)"},
+      {id:"FIRMS_VIIRS_SNPP_Night",name:"Focos de calor (VIIRS)"}
     ];
+    const list=document.getElementById("indicatorsList");
+    const indicatorLayers={};
 
-    const list = document.getElementById("indicatorsList");
-    indicators.forEach(ind => {
-      const div = document.createElement("div");
-      div.className = "indicator-item";
-      div.innerHTML = `<label><input type="checkbox" id="${ind.id}"> ${ind.name}</label>
-        <div class="legend">🗺️ ${ind.id}</div>`;
+    validIndicators.forEach(ind=>{
+      const div=document.createElement("div");
+      div.className="indicator-item";
+      div.innerHTML=`<label><input type="checkbox" id="${ind.id}"> ${ind.name}</label>
+                     <div class="legend">🗺️ ${ind.id}</div>`;
       list.appendChild(div);
-
-      const checkbox = div.querySelector("input");
-      checkbox.addEventListener("change", e=>{
-        const currentDate = datePicker.value || todayStr;
+      const checkbox=div.querySelector("input");
+      checkbox.addEventListener("change",e=>{
+        const date=datePicker.value||todayStr;
         if(e.target.checked){
-          indicatorLayers[ind.id] = L.tileLayer(
-            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${ind.id}/default/${currentDate}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-            { maxZoom: 8, opacity: 0.7, attribution: "NASA GIBS" }
+          indicatorLayers[ind.id]=L.tileLayer(
+            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${ind.id}/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+            {maxZoom:8,opacity:0.7,attribution:"NASA GIBS"}
           ).addTo(map);
         } else {
-          if (indicatorLayers[ind.id]) map.removeLayer(indicatorLayers[ind.id]);
+          if(indicatorLayers[ind.id]) map.removeLayer(indicatorLayers[ind.id]);
         }
       });
     });
 
-    // 🔄 función que actualiza los indicadores activos cuando cambia la fecha
     function updateIndicatorLayers(dateStr){
-      for (const id in indicatorLayers){
-        if (map.hasLayer(indicatorLayers[id])){
+      for(const id in indicatorLayers){
+        if(map.hasLayer(indicatorLayers[id])){
           map.removeLayer(indicatorLayers[id]);
-          indicatorLayers[id] = L.tileLayer(
+          indicatorLayers[id]=L.tileLayer(
             `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-            { maxZoom: 8, opacity: 0.7, attribution: "NASA GIBS" }
+            {maxZoom:8,opacity:0.7,attribution:"NASA GIBS"}
           ).addTo(map);
         }
       }
     }
 
-    indicatorsBtn.addEventListener("click", ()=> {
-      indicatorsPanel.style.display = indicatorsPanel.style.display==="none" ? "block" : "none";
+    indicatorsBtn.addEventListener("click",()=>{
+      indicatorsPanel.style.display=indicatorsPanel.style.display==="none"?"block":"none";
     });
 
   })();
   </script>
 </body>
 </html>
+

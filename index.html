@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Mapa Satélite + Calles + Comparación + Indicadores</title>
+  <title>Mapa Satélite / Calles + Comparación + Indicadores TEMPO</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -24,9 +24,7 @@
       padding:10px; width:230px; font-family:sans-serif;
       box-shadow:0 2px 6px rgba(0,0,0,0.3); display:none; z-index:1100;
     }
-    .compare-panel h4 {
-      margin:0 0 8px; text-align:center; font-size:15px;
-    }
+    .compare-panel h4 { margin:0 0 8px; text-align:center; font-size:15px; }
     .compare-close {
       position:absolute; top:5px; right:8px; background:#eee; border:none;
       border-radius:50%; width:22px; height:22px; cursor:pointer; font-weight:bold;
@@ -139,11 +137,9 @@
       }
     }
 
-    datePicker.addEventListener("change",function(){
-      if(this.value) fadeToNewLayer(this.value);
-    });
+    datePicker.addEventListener("change",function(){ if(this.value) fadeToNewLayer(this.value); });
 
-    btn.addEventListener("click",()=>{
+    btn.addEventListener("click",()=>{ 
       if(showingStreets){
         map.removeLayer(streets); map.addLayer(satelliteLayer);
         btn.textContent="Ver Calles"; showingStreets=false;
@@ -187,17 +183,15 @@
       dateLabel.style.display="none";
     });
 
-    // ---- Indicadores funcionales ----
+    // ---- Indicadores TEMPO ----
     const validIndicators = [
-      { id: "OMPS_AI_L3_1day", name: "Aerosoles UV (OMPS AI)" },
-      { id: "OMI_NO2_Column_Amount_Tropospheric", name: "Dióxido de nitrógeno (NO₂)" },
-      { id: "OMI_SO2_Column_Amount_Day", name: "Dióxido de azufre (SO₂)" },
-      { id: "OMI_Ozone_Column_Amount", name: "Ozono total (O₃)" },
-      { id: "FIRMS_VIIRS_SNPP_Night", name: "Focos de calor (VIIRS)" }
+      { id: "TEMPO_NO2", name: "Dióxido de nitrógeno (NO₂)" },
+      { id: "TEMPO_O3", name: "Ozono (O₃)" },
+      { id: "TEMPO_HCHO", name: "Formaldehído (HCHO)" }
     ];
 
     const list = document.getElementById("indicatorsList");
-    const indicatorLayers = {};
+    let indicatorLayers = {};
 
     validIndicators.forEach(ind => {
       const div = document.createElement("div");
@@ -215,7 +209,7 @@
           if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
           indicatorLayers[id] = L.tileLayer(
             `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-            { maxZoom: 9, opacity: 1, attribution: "NASA GIBS" }
+            { maxZoom: 9, opacity: 1, attribution: "NASA TEMPO" }
           ).addTo(map);
         } else if (indicatorLayers[id]) {
           map.removeLayer(indicatorLayers[id]);
@@ -234,7 +228,7 @@
             map.removeLayer(indicatorLayers[id]);
             indicatorLayers[id] = L.tileLayer(
               `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-              { maxZoom: 9, opacity: 1, attribution: "NASA GIBS" }
+              { maxZoom: 9, opacity: 1, attribution: "NASA TEMPO" }
             ).addTo(map);
           }
         }
@@ -249,5 +243,4 @@
   </script>
 </body>
 </html>
-
 

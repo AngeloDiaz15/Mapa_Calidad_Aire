@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Mapa Satélite con Calles e Indicadores</title>
+  <title>Mapa Satélite + Calles + Comparación + Indicadores</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -17,6 +17,21 @@
       font-size:14px; box-shadow:0 1px 4px rgba(0,0,0,0.3);
     }
     .date-input { width:150px; }
+
+    .compare-panel {
+      position:absolute; top:60px; right:10px;
+      background:white; border:1px solid #ccc; border-radius:8px;
+      padding:10px; width:230px; font-family:sans-serif;
+      box-shadow:0 2px 6px rgba(0,0,0,0.3); display:none; z-index:1100;
+    }
+    .compare-panel h4 {
+      margin:0 0 8px; text-align:center; font-size:15px;
+    }
+    .compare-close {
+      position:absolute; top:5px; right:8px; background:#eee; border:none;
+      border-radius:50%; width:22px; height:22px; cursor:pointer; font-weight:bold;
+    }
+
     .indicators-panel {
       position:absolute; top:60px; left:10px;
       background:white; border:1px solid #ccc; border-radius:8px;
@@ -27,6 +42,13 @@
     .indicators-panel h4 { margin-top:0; text-align:center; }
     .indicator-item { margin-bottom:10px; }
     .legend { font-size:12px; color:#555; margin-left:20px; }
+
+    .date-label {
+      position:absolute; bottom:15px; right:15px;
+      background:rgba(0,0,0,0.6); color:white;
+      padding:6px 12px; border-radius:6px; font-family:sans-serif;
+      font-size:14px; display:none; z-index:1200;
+    }
     .fade-layer { opacity:0; transition:opacity 1.5s ease; }
     .fade-layer.visible { opacity:1; }
   </style>
@@ -37,7 +59,19 @@
   <div class="controls">
     <input type="date" id="datePicker" class="date-input" />
     <button class="custom-button" id="toggleBtn">Ver Calles</button>
+    <button class="custom-button" id="compareBtn">Comparar Fechas</button>
     <button class="custom-button" id="indicatorsBtn">Indicadores de aire</button>
+  </div>
+
+  <div class="compare-panel" id="comparePanel">
+    <button class="compare-close" id="closeCompare">×</button>
+    <h4>Comparación</h4>
+    <label>Fecha inicial:</label>
+    <input type="date" id="startDate" style="width:100%; margin-bottom:8px;">
+    <label>Fecha final:</label>
+    <input type="date" id="endDate" style="width:100%; margin-bottom:8px;">
+    <button id="startCompare" class="custom-button">Iniciar animación</button>
+    <button id="stopCompare" class="custom-button">Detener</button>
   </div>
 
   <div class="indicators-panel" id="indicatorsPanel">
@@ -45,12 +79,19 @@
     <div id="indicatorsList"></div>
   </div>
 
+  <div class="date-label" id="dateLabel"></div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
   (async function(){
     function formatLocalDate(d){
       const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${day}`;
+    }
+    function dateRange(start,end){
+      const result=[]; let c=new Date(start);
+      while(c<=end){result.push(formatLocalDate(c)); c.setDate(c.getDate()+1);}
+      return result;
     }
 
     const mapCenter=[-9.2,-75];
@@ -73,49 +114,88 @@
 
     const btn=document.getElementById("toggleBtn");
     const datePicker=document.getElementById("datePicker");
+    const compareBtn=document.getElementById("compareBtn");
     const indicatorsBtn=document.getElementById("indicatorsBtn");
+    const comparePanel=document.getElementById("comparePanel");
+    const closeCompare=document.getElementById("closeCompare");
     const indicatorsPanel=document.getElementById("indicatorsPanel");
+    const dateLabel=document.getElementById("dateLabel");
     datePicker.value=todayStr; datePicker.max=todayStr;
     let showingStreets=false;
-    let currentIndicator=null;
 
-    // Transición suave
-    async function fadeToLayer(newLayer){
-      newLayer.addTo(map);
-      const container=newLayer.getContainer?.();
+    async function fadeToNewLayer(dateStr){
+      const newLayers=createLayers(dateStr);
+      const nextLayer=(hour>=6&&hour<18)?newLayers.modis:newLayers.viirs;
+      nextLayer.addTo(map);
+      const container=nextLayer.getContainer?.();
       if(container){
         container.classList.add("fade-layer");
         setTimeout(()=>container.classList.add("visible"),50);
         setTimeout(()=>{
-          map.eachLayer(l=>{ if(l!==newLayer) map.removeLayer(l); });
+          map.removeLayer(satelliteLayer);
+          satelliteLayer=nextLayer;
+          updateIndicatorLayers(dateStr);
         },1500);
-      }else{
-        map.eachLayer(l=>{ if(l!==newLayer) map.removeLayer(l); });
+      } else {
+        map.removeLayer(satelliteLayer);
+        satelliteLayer=nextLayer;
+        updateIndicatorLayers(dateStr);
       }
     }
 
-    // Cambio por fecha
     datePicker.addEventListener("change",function(){
-      const d=this.value;
-      const newLayers=createLayers(d);
-      const next=(hour>=6&&hour<18)?newLayers.modis:newLayers.viirs;
-      currentIndicator=null;
-      fadeToLayer(next);
-      satelliteLayer=next;
+      if(this.value) fadeToNewLayer(this.value);
     });
 
-    // Alternar calles/satélite
     btn.addEventListener("click",()=>{
       if(showingStreets){
-        fadeToLayer(satelliteLayer);
+        map.removeLayer(streets); map.addLayer(satelliteLayer);
         btn.textContent="Ver Calles"; showingStreets=false;
       }else{
-        fadeToLayer(streets);
+        map.removeLayer(satelliteLayer); map.addLayer(streets);
         btn.textContent="Ver Satélite"; showingStreets=true;
       }
     });
 
-    // ---- Indicadores ----
+    compareBtn.addEventListener("click",()=>{
+      comparePanel.style.display=comparePanel.style.display==="none"?"block":"none";
+    });
+    closeCompare.addEventListener("click",()=>{
+      comparePanel.style.display="none";
+    });
+
+    const startDate=document.getElementById("startDate");
+    const endDate=document.getElementById("endDate");
+    const startCompare=document.getElementById("startCompare");
+    const stopCompare=document.getElementById("stopCompare");
+    let animationTimer=null;
+    stopCompare.disabled=true;
+
+    startCompare.addEventListener("click",()=>{
+      if(!startDate.value||!endDate.value){alert("Seleccione ambas fechas.");return;}
+      const start=new Date(startDate.value), end=new Date(endDate.value);
+      if(end<start){alert("La fecha final debe ser posterior.");return;}
+      const diffDays=(end-start)/(1000*60*60*24);
+      if(diffDays>30){alert("Máximo 30 días.");return;}
+      const dates=dateRange(start,end); let index=0;
+      stopCompare.disabled=false; startCompare.disabled=true;
+      dateLabel.style.display="block";
+
+      async function animate(){
+        const d=dates[index]; await fadeToNewLayer(d);
+        dateLabel.textContent=`📅 ${d}`;
+        index=(index+1)%dates.length;
+      }
+      animate(); animationTimer=setInterval(animate,2200);
+    });
+
+    stopCompare.addEventListener("click",()=>{
+      if(animationTimer) clearInterval(animationTimer);
+      animationTimer=null; startCompare.disabled=false; stopCompare.disabled=true;
+      dateLabel.style.display="none";
+    });
+
+    // ---- Indicadores funcionales ----
     const validIndicators=[
       {id:"OMPS_AI_L3_1day", name:"Aerosoles UV (OMPS AI)"},
       {id:"OMI_NO2_Column_Amount_Tropospheric", name:"Dióxido de nitrógeno (NO₂)"},
@@ -125,38 +205,47 @@
     ];
 
     const list=document.getElementById("indicatorsList");
+    const indicatorLayers={};
+
     validIndicators.forEach(ind=>{
       const div=document.createElement("div");
       div.className="indicator-item";
-      div.innerHTML=`<label><input type="radio" name="indicator" value="${ind.id}"> ${ind.name}</label>
+      div.innerHTML=`<label><input type="checkbox" id="${ind.id}"> ${ind.name}</label>
                      <div class="legend">🛰️ ${ind.id}</div>`;
       list.appendChild(div);
+      const checkbox=div.querySelector("input");
+      checkbox.addEventListener("change",e=>{
+        const date=datePicker.value||todayStr;
+        if(e.target.checked){
+          indicatorLayers[ind.id]=L.tileLayer(
+            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${ind.id}/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+            {maxZoom:8,opacity:0.7,attribution:"NASA GIBS"}
+          ).addTo(map);
+        } else if(indicatorLayers[ind.id]){
+          map.removeLayer(indicatorLayers[ind.id]);
+        }
+      });
     });
 
-    list.addEventListener("change",e=>{
-      if(e.target.name!=="indicator") return;
-      const id=e.target.value;
-      const date=datePicker.value||todayStr;
-      if(currentIndicator) map.removeLayer(currentIndicator);
-      if(id==="none"){
-        fadeToLayer(satelliteLayer);
-        currentIndicator=null;
-        return;
+    function updateIndicatorLayers(dateStr){
+      for(const id in indicatorLayers){
+        if(map.hasLayer(indicatorLayers[id])){
+          map.removeLayer(indicatorLayers[id]);
+          indicatorLayers[id]=L.tileLayer(
+            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+            {maxZoom:8,opacity:0.7,attribution:"NASA GIBS"}
+          ).addTo(map);
+        }
       }
-      const newLayer=L.tileLayer(
-        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-        {maxZoom:8,attribution:"NASA GIBS"}
-      );
-      currentIndicator=newLayer;
-      fadeToLayer(newLayer);
-    });
+    }
 
-    // Mostrar / ocultar panel
     indicatorsBtn.addEventListener("click",()=>{
       indicatorsPanel.style.display=indicatorsPanel.style.display==="none"?"block":"none";
     });
+
   })();
   </script>
 </body>
 </html>
+
 

@@ -1,131 +1,85 @@
-<!doctype html>
-<html lang="es">
+<!DOCTYPE html>
+<html>
 <head>
   <meta charset="utf-8" />
-  <title>Mapa Satélite (MODIS/VIIRS) + Calles</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <title>Mapa Satelital Día/Noche</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    html,body,#map {height:100%;margin:0;padding:0}
+    #map { height: 100vh; }
     .custom-button {
-      position:absolute;
-      top:10px;
-      left:10px;
-      z-index:1000;
-      background:white;
-      padding:6px 12px;
-      border:1px solid #ccc;
-      border-radius:4px;
-      cursor:pointer;
-      font-family:sans-serif;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 6px 12px;
+      border: 1px solid #ccc;
+      cursor: pointer;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
-  <button class="custom-button" id="toggleBtn">Ver Calles</button>
+  <button id="toggleLayer" class="custom-button">Cambiar a Calles</button>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-  (async function(){
+    // Fecha de hoy en formato YYYY-MM-DD
+    const today = new Date().toISOString().split("T")[0];
 
-    // ---- Funciones utilitarias ----
-    function formatLocalDate(d){
-      const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
-      return `${y}-${m}-${day}`;
-    }
+    // Determinar hora local (día o noche)
+    const now = new Date();
+    const hour = now.getHours();
+    const isDay = (hour >= 6 && hour < 18);
 
-    async function tileExists(url){
-      try {
-        const res = await fetch(url, { method:'HEAD', mode:'cors' });
-        return res.ok;
-      } catch(e){
-        return false;
-      }
-    }
+    // Capas satelitales
+    const modisBands367 = L.tileLayer(
+      "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_Bands367/default/{time}/250m/{z}/{y}/{x}.jpg", {
+        tileSize: 256,
+        time: today,
+        attribution: "NASA GIBS - MODIS Bands367"
+      });
 
-    async function getValidDate(layerName, ext='jpg', z=2, lon=0, lat=0){
-      // calcular tile para prueba
-      const xtile = Math.floor((lon + 180) / 360 * Math.pow(2, z));
-      const latRad = lat * Math.PI / 180;
-      const ytile = Math.floor((1 - Math.log(Math.tan(latRad) + 1/Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z));
+    const viirsBlackMarble = L.tileLayer(
+      "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_At_Sensor_Radiance_500m/default/{time}/500m/{z}/{y}/{x}.jpg", {
+        tileSize: 256,
+        time: today,
+        attribution: "NASA GIBS - VIIRS Black Marble"
+      });
 
-      const today = new Date();
-      const dToday = formatLocalDate(today);
-      const urlToday = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${dToday}/GoogleMapsCompatible_Level9/${z}/${ytile}/${xtile}.${ext}`;
-      if (await tileExists(urlToday)) return dToday;
+    // Capa calles
+    const streets = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors"
+    });
 
-      const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1);
-      const dY = formatLocalDate(yesterday);
-      const urlY = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${dY}/GoogleMapsCompatible_Level9/${z}/${ytile}/${xtile}.${ext}`;
-      if (await tileExists(urlY)) return dY;
-
-      return dToday; // fallback
-    }
-
-    // ---- Configuración ----
-    const mapCenter = [-9.2, -75.0]; // Perú
-    const initialZoom = 4;
-
-    const modisLayerName = "MODIS_Aqua_CorrectedReflectance_TrueColor";
-    const viirsLayerName = "VIIRS_SNPP_DayNightBand_At_Sensor_Radiance";
-
-    // Fechas válidas
-    const modisDate = await getValidDate(modisLayerName, "jpg", 2, mapCenter[1], mapCenter[0]);
-    const viirsDate = await getValidDate(viirsLayerName, "png", 2, mapCenter[1], mapCenter[0]);
-
-    // Capas base
-    const modis = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${modisLayerName}/default/${modisDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
-      { maxZoom: 9, attribution: "NASA MODIS Aqua TrueColor" }
-    );
-
-    const viirs = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${viirsLayerName}/default/${viirsDate}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-      { maxZoom: 8, attribution: "NASA VIIRS NOAA-20 Day/Night Band Radiance" }
-    );
-
-    const streets = L.tileLayer(
-      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      { maxZoom: 19, attribution: "© OpenStreetMap contributors" }
-    );
-
-    // Selección día/noche según hora local (6am-6pm día, resto noche)
-    const hour = new Date().getHours();
-    let satelliteLayer = (hour >= 6 && hour < 18) ? modis : viirs;
-
-    // Crear mapa con la capa satelital inicial
+    // Iniciar mapa
     const map = L.map("map", {
-      center: mapCenter,
-      zoom: initialZoom,
-      layers: [satelliteLayer]
+      center: [0, 0],
+      zoom: 3,
+      layers: [isDay ? modisBands367 : viirsBlackMarble]
     });
 
-    let showingStreets = false;
-    const btn = document.getElementById("toggleBtn");
+    let showingSatellite = true;
+    const toggleButton = document.getElementById("toggleLayer");
 
-    btn.addEventListener("click", function(){
-      if (showingStreets){
-        map.removeLayer(streets);
-        map.addLayer(satelliteLayer);
-        btn.textContent = "Ver Calles";
-        showingStreets = false;
+    toggleButton.addEventListener("click", () => {
+      if (showingSatellite) {
+        map.eachLayer(layer => map.removeLayer(layer));
+        streets.addTo(map);
+        toggleButton.textContent = "Cambiar a Satélite";
       } else {
-        map.removeLayer(satelliteLayer);
-        map.addLayer(streets);
-        btn.textContent = "Ver Satélite";
-        showingStreets = true;
+        map.eachLayer(layer => map.removeLayer(layer));
+        (isDay ? modisBands367 : viirsBlackMarble).addTo(map);
+        toggleButton.textContent = "Cambiar a Calles";
       }
+      showingSatellite = !showingSatellite;
     });
-
-  })();
   </script>
 </body>
 </html>
-
-
-
-
-
 

@@ -45,12 +45,30 @@
       box-shadow: 0 2px 6px rgba(0,0,0,0.3);
       display: none;
       z-index: 1100;
-      width: 200px;
+      width: 220px;
     }
 
-    .compare-panel h4 { margin: 0 0 6px; font-size: 15px; text-align: center; }
+    .compare-panel h4 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      text-align: center;
+    }
+
     .compare-panel input { width: 100%; margin-bottom: 8px; }
     .compare-panel button { width: 100%; margin-top: 4px; }
+
+    /* Botón cerrar (X) */
+    .close-btn {
+      position: absolute;
+      top: 5px;
+      right: 8px;
+      background: none;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      color: #666;
+    }
+    .close-btn:hover { color: #000; }
 
     /* Indicador de fecha actual */
     .date-label {
@@ -67,10 +85,10 @@
       display: none;
     }
 
-    /* Transición entre capas */
+    /* Animación de desvanecimiento */
     .fade-layer {
       opacity: 0;
-      transition: opacity 1s ease;
+      transition: opacity 1.5s ease;
     }
     .fade-layer.visible {
       opacity: 1;
@@ -87,6 +105,7 @@
   </div>
 
   <div class="compare-panel" id="comparePanel">
+    <button class="close-btn" id="closePanel">✖</button>
     <h4>Comparación</h4>
     <label>Fecha inicial:</label>
     <input type="date" id="startDate">
@@ -96,12 +115,13 @@
     <button id="stopCompare" class="custom-button">Detener</button>
   </div>
 
+  <!-- Indicador visual de la fecha -->
   <div class="date-label" id="dateLabel"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
   <script>
   (async function(){
-    // ---- Funciones ----
     function formatLocalDate(d){
       const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${day}`;
@@ -117,7 +137,7 @@
       return result;
     }
 
-    // ---- Configuración ----
+    // ---- Configuración inicial ----
     const mapCenter = [-9.2, -75.0];
     const initialZoom = 4;
     const today = new Date();
@@ -126,15 +146,18 @@
 
     const map = L.map("map", { center: mapCenter, zoom: initialZoom });
 
+    // ---- Crear capas ----
     function createLayers(dateStr) {
       const modis = L.tileLayer(
         `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
         { maxZoom: 9, attribution: "NASA MODIS Aqua TrueColor" }
       );
+
       const viirs = L.tileLayer(
         `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_At_Sensor_Radiance/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-        { maxZoom: 8, attribution: "NASA VIIRS NOAA-20 Day/Night Band Radiance" }
+        { maxZoom: 8, attribution: "NASA VIIRS Day/Night Band Radiance" }
       );
+
       return { modis, viirs };
     }
 
@@ -143,31 +166,47 @@
     let satelliteLayer = (hour >= 6 && hour < 18) ? modis : viirs;
     satelliteLayer.addTo(map);
 
+    // ---- Controles ----
     let showingStreets = false;
     const btn = document.getElementById("toggleBtn");
     const datePicker = document.getElementById("datePicker");
     const compareBtn = document.getElementById("compareBtn");
     const comparePanel = document.getElementById("comparePanel");
+    const closePanel = document.getElementById("closePanel");
     const dateLabel = document.getElementById("dateLabel");
-    const startDate = document.getElementById("startDate");
-    const endDate = document.getElementById("endDate");
-    const startCompare = document.getElementById("startCompare");
-    const stopCompare = document.getElementById("stopCompare");
 
     datePicker.value = todayStr;
     datePicker.max = todayStr;
+
+    // ---- Función de transición ----
+    async function fadeToNewLayer(dateStr) {
+      const newLayers = createLayers(dateStr);
+      const nextLayer = (hour >= 6 && hour < 18) ? newLayers.modis : newLayers.viirs;
+      nextLayer.getContainer?.()?.classList?.add("fade-layer");
+      nextLayer.addTo(map);
+
+      const container = nextLayer.getContainer?.();
+      if (container) {
+        container.classList.add("fade-layer");
+        setTimeout(() => container.classList.add("visible"), 50);
+        setTimeout(() => {
+          map.removeLayer(satelliteLayer);
+          satelliteLayer = nextLayer;
+        }, 1500);
+      } else {
+        map.removeLayer(satelliteLayer);
+        satelliteLayer = nextLayer;
+      }
+    }
 
     // ---- Cambiar fecha manual ----
     datePicker.addEventListener("change", function(){
       const selectedDate = this.value;
       if (!selectedDate) return;
-      map.removeLayer(satelliteLayer);
-      const newLayers = createLayers(selectedDate);
-      satelliteLayer = (hour >= 6 && hour < 18) ? newLayers.modis : newLayers.viirs;
-      if (!showingStreets) satelliteLayer.addTo(map);
+      fadeToNewLayer(selectedDate);
     });
 
-    // ---- Alternar calles ----
+    // ---- Alternar calles/satélite ----
     btn.addEventListener("click", function(){
       if (showingStreets){
         map.removeLayer(streets);
@@ -182,63 +221,59 @@
       }
     });
 
-    // ---- Mostrar / Ocultar panel ----
+    // ---- Panel de comparación ----
     compareBtn.addEventListener("click", () => {
       comparePanel.style.display = comparePanel.style.display === "none" ? "block" : "none";
     });
 
+    closePanel.addEventListener("click", () => {
+      comparePanel.style.display = "none";
+    });
+
+    const startDate = document.getElementById("startDate");
+    const endDate = document.getElementById("endDate");
+    const startCompare = document.getElementById("startCompare");
+    const stopCompare = document.getElementById("stopCompare");
+
     let animationTimer = null;
     stopCompare.disabled = true;
 
-    // ---- Animación ----
     startCompare.addEventListener("click", () => {
-      if (!startDate.value || !endDate.value) return alert("Seleccione ambas fechas.");
+      if (!startDate.value || !endDate.value) {
+        alert("Seleccione ambas fechas.");
+        return;
+      }
       const start = new Date(startDate.value);
       const end = new Date(endDate.value);
       const diffDays = (end - start) / (1000*60*60*24);
-      if (diffDays < 0) return alert("La fecha final debe ser posterior.");
-      if (diffDays > 30) return alert("Máximo 30 días.");
+      if (diffDays < 0) { alert("La fecha final debe ser posterior."); return; }
+      if (diffDays > 30) { alert("Máximo 30 días."); return; }
 
       const dates = dateRange(start, end);
       let index = 0;
+
       stopCompare.disabled = false;
       startCompare.disabled = true;
       dateLabel.style.display = "block";
 
-      let currentLayer = satelliteLayer;
-
-      function animate() {
-        if (index >= dates.length) index = 0;
-        const newLayers = createLayers(dates[index]);
-        const nextLayer = (hour >= 6 && hour < 18) ? newLayers.modis : newLayers.viirs;
-        nextLayer.addTo(map);
-        nextLayer.getContainer().classList.add('fade-layer');
-        requestAnimationFrame(() => nextLayer.getContainer().classList.add('visible'));
-
-        // Quitar el anterior suavemente
-        setTimeout(() => {
-          if (currentLayer) map.removeLayer(currentLayer);
-          currentLayer = nextLayer;
-        }, 1000);
-
+      async function animate() {
+        await fadeToNewLayer(dates[index]);
         dateLabel.textContent = `📅 ${dates[index]}`;
-        index++;
+        index = (index + 1) % dates.length;
       }
 
       animate();
       animationTimer = setInterval(animate, 2000);
     });
 
-    // ---- Detener animación ----
     stopCompare.addEventListener("click", () => {
       if (animationTimer) clearInterval(animationTimer);
       animationTimer = null;
       startCompare.disabled = false;
       stopCompare.disabled = true;
       dateLabel.style.display = "none";
-      comparePanel.style.display = "none"; // 🔹 Cierra el panel al detener
+      comparePanel.style.display = "none"; // 🔹 se cierra al detener
     });
-
   })();
   </script>
 </body>

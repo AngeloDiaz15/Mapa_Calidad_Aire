@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Mapa Satélite (MODIS/VIIRS) + Calles + Comparación</title>
+  <title>Mapa Satélite (MODIS/VIIRS) + Calles + Comparación + Indicadores</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -46,7 +46,6 @@
       display: none;
       z-index: 1100;
       width: 220px;
-      box-sizing: border-box;
     }
 
     .compare-panel h4 {
@@ -55,23 +54,38 @@
       text-align: center;
     }
 
-    .compare-panel input { width: 100%; margin-bottom: 8px; }
-    .compare-panel button { width: 100%; margin-top: 4px; }
-
-    /* Botón cerrar (X) */
-    .close-btn {
+    /* Panel de indicadores */
+    .indicators-panel {
       position: absolute;
-      top: 6px;
-      right: 8px;
-      background: none;
-      border: none;
-      font-size: 18px;
-      font-weight: bold;
-      cursor: pointer;
-      color: #888;
-      line-height: 1;
+      top: 60px;
+      left: 10px;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 10px;
+      font-family: sans-serif;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      display: none;
+      z-index: 1100;
+      width: 300px;
+      max-height: 80%;
+      overflow-y: auto;
     }
-    .close-btn:hover { color: #000; }
+
+    .indicators-panel h4 {
+      text-align: center;
+      margin-top: 0;
+    }
+
+    .indicator-item {
+      margin-bottom: 8px;
+    }
+
+    .legend {
+      font-size: 12px;
+      color: #444;
+      margin-left: 20px;
+    }
 
     /* Indicador de fecha actual */
     .date-label {
@@ -93,9 +107,7 @@
       opacity: 0;
       transition: opacity 1.5s ease;
     }
-    .fade-layer.visible {
-      opacity: 1;
-    }
+    .fade-layer.visible { opacity: 1; }
   </style>
 </head>
 <body>
@@ -105,24 +117,27 @@
     <input type="date" id="datePicker" class="date-input" />
     <button class="custom-button" id="toggleBtn">Ver Calles</button>
     <button class="custom-button" id="compareBtn">Comparar Fechas</button>
+    <button class="custom-button" id="indicatorsBtn">Indicadores de aire</button>
   </div>
 
   <div class="compare-panel" id="comparePanel">
-    <button class="close-btn" id="closePanel">✖</button>
     <h4>Comparación</h4>
     <label>Fecha inicial:</label>
-    <input type="date" id="startDate">
+    <input type="date" id="startDate" style="width:100%; margin-bottom:8px;">
     <label>Fecha final:</label>
-    <input type="date" id="endDate">
+    <input type="date" id="endDate" style="width:100%; margin-bottom:8px;">
     <button id="startCompare" class="custom-button">Iniciar animación</button>
     <button id="stopCompare" class="custom-button">Detener</button>
   </div>
 
-  <!-- Indicador visual de la fecha -->
+  <div class="indicators-panel" id="indicatorsPanel">
+    <h4>Indicadores de aire</h4>
+    <div id="indicatorsList"></div>
+  </div>
+
   <div class="date-label" id="dateLabel"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
   <script>
   (async function(){
     function formatLocalDate(d){
@@ -140,27 +155,22 @@
       return result;
     }
 
-    // ---- Configuración inicial ----
-    const mapCenter = [0, 0]; // 🌍 Vista global
-    const initialZoom = 2;
+    const mapCenter = [0, 0];
+    const map = L.map("map", { center: mapCenter, zoom: 2 });
+
     const today = new Date();
     const todayStr = formatLocalDate(today);
     const hour = new Date().getHours();
 
-    const map = L.map("map", { center: mapCenter, zoom: initialZoom });
-
-    // ---- Crear capas ----
     function createLayers(dateStr) {
       const modis = L.tileLayer(
         `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
         { maxZoom: 9, attribution: "NASA MODIS Aqua TrueColor" }
       );
-
       const viirs = L.tileLayer(
         `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_DayNightBand_At_Sensor_Radiance/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-        { maxZoom: 8, attribution: "NASA VIIRS Day/Night Band Radiance" }
+        { maxZoom: 8, attribution: "NASA VIIRS DNB" }
       );
-
       return { modis, viirs };
     }
 
@@ -169,19 +179,18 @@
     let satelliteLayer = (hour >= 6 && hour < 18) ? modis : viirs;
     satelliteLayer.addTo(map);
 
-    // ---- Controles ----
-    let showingStreets = false;
     const btn = document.getElementById("toggleBtn");
     const datePicker = document.getElementById("datePicker");
     const compareBtn = document.getElementById("compareBtn");
+    const indicatorsBtn = document.getElementById("indicatorsBtn");
     const comparePanel = document.getElementById("comparePanel");
-    const closePanel = document.getElementById("closePanel");
+    const indicatorsPanel = document.getElementById("indicatorsPanel");
     const dateLabel = document.getElementById("dateLabel");
-
     datePicker.value = todayStr;
     datePicker.max = todayStr;
 
-    // ---- Función de transición ----
+    let showingStreets = false;
+
     async function fadeToNewLayer(dateStr) {
       const newLayers = createLayers(dateStr);
       const nextLayer = (hour >= 6 && hour < 18) ? newLayers.modis : newLayers.viirs;
@@ -200,14 +209,10 @@
       }
     }
 
-    // ---- Cambiar fecha manual ----
     datePicker.addEventListener("change", function(){
-      const selectedDate = this.value;
-      if (!selectedDate) return;
-      fadeToNewLayer(selectedDate);
+      if (this.value) fadeToNewLayer(this.value);
     });
 
-    // ---- Alternar calles/satélite ----
     btn.addEventListener("click", function(){
       if (showingStreets){
         map.removeLayer(streets);
@@ -222,20 +227,14 @@
       }
     });
 
-    // ---- Panel de comparación ----
     compareBtn.addEventListener("click", () => {
       comparePanel.style.display = comparePanel.style.display === "none" ? "block" : "none";
-    });
-
-    closePanel.addEventListener("click", () => {
-      comparePanel.style.display = "none";
     });
 
     const startDate = document.getElementById("startDate");
     const endDate = document.getElementById("endDate");
     const startCompare = document.getElementById("startCompare");
     const stopCompare = document.getElementById("stopCompare");
-
     let animationTimer = null;
     stopCompare.disabled = true;
 
@@ -252,7 +251,6 @@
 
       const dates = dateRange(start, end);
       let index = 0;
-
       stopCompare.disabled = false;
       startCompare.disabled = true;
       dateLabel.style.display = "block";
@@ -275,8 +273,49 @@
       dateLabel.style.display = "none";
       comparePanel.style.display = "none";
     });
+
+    // ---- Indicadores ----
+    const indicatorLayers = {};
+    const indicators = [
+      {id:"GHRSST_L4_MUR_Sea_Surface_Temperature", name:"Temperatura superficial del mar"},
+      {id:"AMSRU2_L3_Total_Precipitable_Water_Daily", name:"Agua precipitable total"},
+      {id:"AMSRU2_L3_Ocean_Wind_Speed_Daily", name:"Velocidad del viento oceánico"},
+      {id:"TROPOMI_L2_Sulfur_Dioxide_Total_Vertical_Column_Daily", name:"Dióxido de azufre (SO₂)"},
+      {id:"OCO-3_Carbon_Dioxide_Total_Column_Average", name:"Dióxido de carbono (CO₂)"},
+      {id:"AIRS_L2_Methane_400hPa_Volume_Mixing_Ratio_Day", name:"Metano (día)"},
+      {id:"AIRS_L2_Methane_400hPa_Volume_Mixing_Ratio_Night", name:"Metano (noche)"},
+      {id:"AIRS_L2_Carbon_Monoxide_500hPa_Volume_Mixing_Ratio_Day", name:"Monóxido de carbono (día)"},
+      {id:"AIRS_L2_Carbon_Monoxide_500hPa_Volume_Mixing_Ratio_Night", name:"Monóxido de carbono (noche)"},
+      {id:"TEMPO_L3_Cloud_Cloud_Pressure_Total", name:"Presión de nubes"},
+      {id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"Ozono (troposfera)"},
+      {id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehído (HCHO)"},
+      {id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"Dióxido de nitrógeno (NO₂)"},
+      {id:"AIRS_L2_Surface_Air_Temperature_Day", name:"Temperatura aire (día)"},
+      {id:"AIRS_L2_Surface_Air_Temperature_Night", name:"Temperatura aire (noche)"}
+    ];
+
+    const list = document.getElementById("indicatorsList");
+    indicators.forEach(ind => {
+      const div = document.createElement("div");
+      div.className = "indicator-item";
+      div.innerHTML = `<label><input type="checkbox" id="${ind.id}"> ${ind.name}</label>
+        <div class="legend">🗺️ ${ind.id}</div>`;
+      list.appendChild(div);
+      indicatorLayers[ind.id] = L.tileLayer(
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${ind.id}/default/${todayStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+        { maxZoom: 8, opacity: 0.7, attribution: "NASA GIBS" }
+      );
+      div.querySelector("input").addEventListener("change", e=>{
+        if(e.target.checked) indicatorLayers[ind.id].addTo(map);
+        else map.removeLayer(indicatorLayers[ind.id]);
+      });
+    });
+
+    indicatorsBtn.addEventListener("click", ()=>{
+      indicatorsPanel.style.display = indicatorsPanel.style.display==="none" ? "block" : "none";
+    });
+
   })();
   </script>
 </body>
 </html>
-

@@ -60,7 +60,7 @@
     <input type="date" id="datePicker" class="date-input" />
     <button class="custom-button" id="toggleBtn">Ver Calles</button>
     <button class="custom-button" id="compareBtn">Comparar Fechas</button>
-    <button class="custom-button" id="indicatorsBtn">Indicadores de aire</button>
+    <button class="custom-button" id="indicatorsBtn">Gases (TEMPO)</button>
   </div>
 
   <div class="compare-panel" id="comparePanel">
@@ -189,11 +189,9 @@
 
     // ---- Indicadores funcionales ----
     const validIndicators = [
-      { id: "OMPS_AI_L3_1day", name: "Aerosoles UV (OMPS AI)" },
-      { id: "OMI_NO2_Column_Amount_Tropospheric", name: "Dióxido de nitrógeno (NO₂)" },
-      { id: "OMI_SO2_Column_Amount_Day", name: "Dióxido de azufre (SO₂)" },
-      { id: "OMI_Ozone_Column_Amount", name: "Ozono total (O₃)" },
-      { id: "FIRMS_VIIRS_SNPP_Night", name: "Focos de calor (VIIRS)" }
+      { id: "TEMPO_L3_Formaldehyde_Vertical_Column", name: "Formaldehyde (L3, Vertical Column, Subdaily, TEMPO)" },
+      { id: "TEMPO_L3_NO2_Vertical_Column_Troposphere", name: "Nitrogen Dioxide (L3, Vertical Column Troposphere, Subdaily, TEMPO)" },
+      { id: "TEMPO_L3_Ozone_Profile_Troposphere_Column", name: "Ozone Profile (L3, Troposphere Column, Subdaily, TEMPO)" },
     ];
 
     const list = document.getElementById("indicatorsList");
@@ -214,7 +212,7 @@
         if (e.target.checked) {
           if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
           indicatorLayers[id] = L.tileLayer(
-            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${date}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
             { maxZoom: 9, opacity: 1, attribution: "NASA GIBS" }
           ).addTo(map);
         } else if (indicatorLayers[id]) {
@@ -233,7 +231,7 @@
           if (map.hasLayer(indicatorLayers[id])) {
             map.removeLayer(indicatorLayers[id]);
             indicatorLayers[id] = L.tileLayer(
-              `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+              `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
               { maxZoom: 9, opacity: 1, attribution: "NASA GIBS" }
             ).addTo(map);
           }
@@ -249,6 +247,7 @@
   </script>
 </body>
 </html>
+
 
 
 

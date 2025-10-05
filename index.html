@@ -23,7 +23,7 @@
     }
     .compare-panel { right:10px; width:230px; display:none; }
     .indicators-panel { left:10px; width:340px; max-height:80%; overflow-y:auto; display:none; }
-    .compare-close {
+    .compare-close, .indicators-close {
       position:absolute; top:5px; right:8px; background:#eee; border:none;
       border-radius:50%; width:22px; height:22px; cursor:pointer; font-weight:bold;
     }
@@ -58,16 +58,28 @@
   </div>
 
   <div class="indicators-panel" id="indicatorsPanel">
+    <button class="indicators-close" id="closeIndicators">×</button>
     <h4>Indicadores de aire (TEMPO)</h4>
+
     <label for="tempoTimestamp" style="display:block; font-size:13px; margin-bottom:4px;">🕒 Seleccionar tiempo disponible:</label>
     <select id="tempoTimestamp" style="width:100%; margin-bottom:10px;">
       <option value="">Selecciona un indicador primero</option>
     </select>
 
     <div id="indicatorsList"></div>
+
+    <hr>
+    <h5 style="margin:8px 0 4px;">Animación de gases</h5>
+    <label>Inicio:</label>
+    <select id="tempoStart" style="width:100%; margin-bottom:4px;"></select>
+    <label>Fin:</label>
+    <select id="tempoEnd" style="width:100%; margin-bottom:8px;"></select>
+    <button id="startTempoAnim" class="custom-button">Iniciar animación</button>
+    <button id="stopTempoAnim" class="custom-button" disabled>Detener</button>
+
     <div style="font-size:12px; color:#444; margin-top:8px;">
       Las fechas se obtienen automáticamente del servidor GIBS (NASA).  
-      Si no hay datos disponibles para un instante, puede mostrarse vacío.
+      Si no hay datos disponibles, puede mostrarse vacío.
     </div>
   </div>
 
@@ -80,11 +92,6 @@
     function formatLocalDate(d){
       const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${day}`;
-    }
-    function dateRange(start,end){
-      const result=[]; let c=new Date(start);
-      while(c<=end){result.push(formatLocalDate(c)); c.setDate(c.getDate()+1);}
-      return result;
     }
 
     /* ---------------- mapa base ---------------- */
@@ -106,7 +113,7 @@
     satelliteLayer.addTo(map);
     let showingStreets=false;
 
-    /* ---------------- controles ---------------- */
+    /* ---------------- controles generales ---------------- */
     const btn=document.getElementById("toggleBtn");
     const datePicker=document.getElementById("datePicker");
     datePicker.value=todayStr; datePicker.max=todayStr;
@@ -131,137 +138,76 @@
     });
     datePicker.addEventListener("change",()=>{ if(datePicker.value) fadeToNewLayer(datePicker.value); });
 
-    /* ---------------- comparación ---------------- */
-    const compareBtn=document.getElementById("compareBtn");
-    const comparePanel=document.getElementById("comparePanel");
-    const closeCompare=document.getElementById("closeCompare");
-    const startDate=document.getElementById("startDate");
-    const endDate=document.getElementById("endDate");
-    const startCompare=document.getElementById("startCompare");
-    const stopCompare=document.getElementById("stopCompare");
-    const dateLabel=document.getElementById("dateLabel");
-    let animationTimer=null;
-    stopCompare.disabled=true;
-
-    compareBtn.addEventListener("click",()=>{ comparePanel.style.display=comparePanel.style.display==="none"?"block":"none"; });
-    closeCompare.addEventListener("click",()=>{ comparePanel.style.display="none"; });
-
-    startCompare.addEventListener("click",()=>{
-      if(!startDate.value||!endDate.value){alert("Seleccione ambas fechas.");return;}
-      const start=new Date(startDate.value), end=new Date(endDate.value);
-      if(end<start){alert("La fecha final debe ser posterior.");return;}
-      const diffDays=(end-start)/(1000*60*60*24);
-      if(diffDays>30){alert("Máximo 30 días.");return;}
-      const dates=dateRange(start,end); let index=0;
-      stopCompare.disabled=false; startCompare.disabled=true;
-      dateLabel.style.display="block";
-      async function animate(){
-        const d=dates[index]; await fadeToNewLayer(d);
-        dateLabel.textContent=`📅 ${d}`; index=(index+1)%dates.length;
-      }
-      animate(); animationTimer=setInterval(animate,2200);
-    });
-    stopCompare.addEventListener("click",()=>{
-      if(animationTimer) clearInterval(animationTimer);
-      animationTimer=null; startCompare.disabled=false; stopCompare.disabled=true;
-      dateLabel.style.display="none";
-    });
-
     /* ---------------- TEMPO GASES ---------------- */
     const indicatorsBtn=document.getElementById("indicatorsBtn");
     const indicatorsPanel=document.getElementById("indicatorsPanel");
+    const closeIndicators=document.getElementById("closeIndicators");
     const timestampSelect=document.getElementById("tempoTimestamp");
+    const tempoStart=document.getElementById("tempoStart");
+    const tempoEnd=document.getElementById("tempoEnd");
+    const startTempoAnim=document.getElementById("startTempoAnim");
+    const stopTempoAnim=document.getElementById("stopTempoAnim");
     const indicatorsList=document.getElementById("indicatorsList");
+    const dateLabel=document.getElementById("dateLabel");
 
     const validIndicators=[
-      { id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehyde (L2, Vertical Column)" },
-      { id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"NO₂ (L2, Troposphere Column)" },
-      { id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"O₃ (L2, Troposphere Column)" }
+      { id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehyde (L3, Vertical Column)" },
+      { id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"NO₂ (L3, Troposphere Column)" },
+      { id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"O₃ (L3, Troposphere Column)" }
     ];
 
     let indicatorLayers={};
     let selectedIso=null;
+    let tempoTimes=[];
+    let tempoTimer=null;
 
-    // Carga timestamps específicos por capa TEMPO
-   // Carga timestamps específicos por capa TEMPO
-async function loadTimesForLayer(layerId) {
-  try {
-    const res = await fetch("https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml");
-    const text = await res.text();
-    const parser = new DOMParser();
-    const xml = parser.parseFromString(text, "application/xml");
-
-    // Buscar la capa, permitiendo Identifier con o sin prefijo ows:
-    const layers = [...xml.querySelectorAll("Layer")];
-    const layerNode = layers.find(l => {
-      const idNode = l.querySelector("ows\\:Identifier, Identifier");
-      return idNode && idNode.textContent.trim() === layerId;
-    });
-
-    if (!layerNode) {
-      console.warn("⚠️ Capa no encontrada en WMTSCapabilities:", layerId);
-      return [];
+    async function loadTimesForLayer(layerId){
+      try {
+        const res=await fetch("https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml");
+        const text=await res.text();
+        const xml=new DOMParser().parseFromString(text,"application/xml");
+        const layers=[...xml.querySelectorAll("Layer")];
+        const node=layers.find(l=>{
+          const idNode=l.querySelector("ows\\:Identifier, Identifier");
+          return idNode && idNode.textContent.trim()===layerId;
+        });
+        if(!node) return [];
+        const dim=node.querySelector("Dimension, ows\\:Dimension");
+        if(!dim) return [];
+        const values=[...dim.querySelectorAll("Value")].map(v=>v.textContent.match(/^([^/]+)/)?.[1]).filter(Boolean);
+        return values.reverse();
+      } catch(e){console.error(e); return [];}
     }
 
-    // Buscar nodo Dimension (puede ser <Dimension> o <ows:Dimension>)
-    const dimNode = layerNode.querySelector("Dimension, ows\\:Dimension");
-    if (!dimNode) {
-      console.warn("⚠️ La capa existe pero no tiene dimensión de tiempo:", layerId);
-      return [];
-    }
-
-    // Extraer valores de tiempo desde los Value o rango de tiempo
-    let times = [];
-    const valueNodes = dimNode.querySelectorAll("Value");
-    if (valueNodes.length > 0) {
-      valueNodes.forEach(v => {
-        const match = v.textContent.match(/^([^/]+)/);
-        if (match) times.push(match[1]);
-      });
-    } else {
-      // Algunos usan formato "start/end/P1D"
-      const rangeText = dimNode.textContent.trim();
-      const parts = rangeText.split("/");
-      if (parts.length === 3) {
-        const [start, end] = parts;
-        let current = new Date(start);
-        const endDate = new Date(end);
-        while (current <= endDate) {
-          times.push(current.toISOString().split("T")[0]);
-          current.setUTCDate(current.getUTCDate() + 1);
-        }
-      }
-    }
-
-    // Devolver ordenado (recientes primero)
-    return times.reverse();
-  } catch (err) {
-    console.error("❌ Error cargando tiempos de capa:", err);
-    return [];
-  }
-}
-
-
-
-    // Actualiza selector según la capa activa
     async function updateTimestampSelectorFor(layerId){
       timestampSelect.innerHTML='<option>Cargando...</option>';
+      tempoStart.innerHTML="";
+      tempoEnd.innerHTML="";
       const times=await loadTimesForLayer(layerId);
+      tempoTimes=times;
       timestampSelect.innerHTML="";
       if(times.length===0){
         timestampSelect.innerHTML='<option value="">Sin tiempos disponibles</option>';
-        selectedIso=null; return;
+        return;
       }
       times.forEach(t=>{
-        const opt=document.createElement("option");
-        opt.value=t; opt.textContent=t;
-        timestampSelect.appendChild(opt);
+        const o=document.createElement("option");
+        o.value=t; o.textContent=t; timestampSelect.appendChild(o);
       });
       selectedIso=times[0];
       timestampSelect.value=selectedIso;
+
+      // llenar selects de animación
+      times.forEach(t=>{
+        const a=document.createElement("option");
+        a.value=t; a.textContent=t;
+        tempoStart.appendChild(a.cloneNode(true));
+        tempoEnd.appendChild(a);
+      });
+      tempoStart.value=times[times.length-2]||times[0];
+      tempoEnd.value=times[0];
     }
 
-    // Crear checkboxes de gases
     validIndicators.forEach(ind=>{
       const div=document.createElement("div");
       div.className="indicator-item";
@@ -269,50 +215,71 @@ async function loadTimesForLayer(layerId) {
                      <div class="legend">🛰️ ${ind.id}</div>`;
       indicatorsList.appendChild(div);
       const checkbox=div.querySelector("input");
-
       checkbox.addEventListener("change",async e=>{
         const id=ind.id;
         if(e.target.checked){
           await updateTimestampSelectorFor(ind.id);
-          if(!selectedIso){ alert("No hay tiempos disponibles para esta capa."); return; }
+          if(!selectedIso){alert("No hay tiempos disponibles para esta capa."); return;}
           indicatorLayers[id]=L.tileLayer(
             `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${selectedIso}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
             {maxZoom:9,opacity:0.8,attribution:"NASA GIBS"}
           ).addTo(map);
-        }else if(indicatorLayers[id]){
-          map.removeLayer(indicatorLayers[id]);
-          delete indicatorLayers[id];
+        } else if(indicatorLayers[id]){
+          map.removeLayer(indicatorLayers[id]); delete indicatorLayers[id];
         }
       });
     });
 
-    // Cambio manual del selector
     timestampSelect.addEventListener("change",()=>{
       selectedIso=timestampSelect.value;
       updateIndicatorLayers(selectedIso);
     });
 
-    function updateIndicatorLayers(isoTimestamp){
+    function updateIndicatorLayers(iso){
       for(const id in indicatorLayers){
-        const visible=map.hasLayer(indicatorLayers[id]);
+        const vis=map.hasLayer(indicatorLayers[id]);
         map.removeLayer(indicatorLayers[id]);
         indicatorLayers[id]=L.tileLayer(
-          `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${isoTimestamp}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
+          `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${iso}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
           {maxZoom:9,opacity:0.8,attribution:"NASA GIBS"}
         );
-        if(visible) indicatorLayers[id].addTo(map);
+        if(vis) indicatorLayers[id].addTo(map);
       }
     }
+
+    // animación
+    startTempoAnim.addEventListener("click",()=>{
+      if(!tempoTimes.length){alert("Selecciona un gas primero."); return;}
+      const i1=tempoTimes.indexOf(tempoStart.value);
+      const i2=tempoTimes.indexOf(tempoEnd.value);
+      if(i1===-1||i2===-1){alert("Selecciona fechas válidas."); return;}
+      const subset=tempoTimes.slice(Math.min(i1,i2),Math.max(i1,i2)+1);
+      if(subset.length===0){alert("Rango vacío."); return;}
+      let idx=0;
+      startTempoAnim.disabled=true; stopTempoAnim.disabled=false;
+      dateLabel.style.display="block";
+      function animate(){
+        const t=subset[idx];
+        selectedIso=t; updateIndicatorLayers(t);
+        dateLabel.textContent=`🕒 ${t}`;
+        idx=(idx+1)%subset.length;
+      }
+      animate();
+      tempoTimer=setInterval(animate,2200);
+    });
+
+    stopTempoAnim.addEventListener("click",()=>{
+      clearInterval(tempoTimer);
+      tempoTimer=null;
+      dateLabel.style.display="none";
+      startTempoAnim.disabled=false; stopTempoAnim.disabled=true;
+    });
 
     indicatorsBtn.addEventListener("click",()=>{
       indicatorsPanel.style.display=indicatorsPanel.style.display==="none"?"block":"none";
     });
-
+    closeIndicators.addEventListener("click",()=>{indicatorsPanel.style.display="none";});
   })();
   </script>
 </body>
 </html>
-
-
-
-

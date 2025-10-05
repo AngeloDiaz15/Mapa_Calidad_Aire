@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Mapa Satélite Calles + Comparación + Indicadores</title>
+  <title>Mapa Satélite / Calles + Comparación + Indicadores</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -191,36 +191,56 @@ async function loadTimesForLayer(layerId) {
     const parser = new DOMParser();
     const xml = parser.parseFromString(text, "application/xml");
 
-    // Busca el nodo Layer exacto por su Identifier
-    const layerNode = [...xml.querySelectorAll("Layer")]
-      .find(l => l.querySelector("ows\\:Identifier")?.textContent.trim() === layerId);
+    // Buscar la capa, permitiendo Identifier con o sin prefijo ows:
+    const layers = [...xml.querySelectorAll("Layer")];
+    const layerNode = layers.find(l => {
+      const idNode = l.querySelector("ows\\:Identifier, Identifier");
+      return idNode && idNode.textContent.trim() === layerId;
+    });
 
     if (!layerNode) {
-      console.warn("Capa no encontrada en WMTSCapabilities:", layerId);
+      console.warn("⚠️ Capa no encontrada en WMTSCapabilities:", layerId);
       return [];
     }
 
-    // Busca el bloque de Dimension que contenga los tiempos
-    const dimNode = [...layerNode.querySelectorAll("Dimension")]
-      .find(d => d.querySelector("ows\\:Identifier")?.textContent === "Time");
-    if (!dimNode) return [];
+    // Buscar nodo Dimension (puede ser <Dimension> o <ows:Dimension>)
+    const dimNode = layerNode.querySelector("Dimension, ows\\:Dimension");
+    if (!dimNode) {
+      console.warn("⚠️ La capa existe pero no tiene dimensión de tiempo:", layerId);
+      return [];
+    }
 
-    // Extrae los valores de tiempo de cada <Value>
+    // Extraer valores de tiempo desde los Value o rango de tiempo
+    let times = [];
     const valueNodes = dimNode.querySelectorAll("Value");
-    const times = [];
+    if (valueNodes.length > 0) {
+      valueNodes.forEach(v => {
+        const match = v.textContent.match(/^([^/]+)/);
+        if (match) times.push(match[1]);
+      });
+    } else {
+      // Algunos usan formato "start/end/P1D"
+      const rangeText = dimNode.textContent.trim();
+      const parts = rangeText.split("/");
+      if (parts.length === 3) {
+        const [start, end] = parts;
+        let current = new Date(start);
+        const endDate = new Date(end);
+        while (current <= endDate) {
+          times.push(current.toISOString().split("T")[0]);
+          current.setUTCDate(current.getUTCDate() + 1);
+        }
+      }
+    }
 
-    valueNodes.forEach(v => {
-      const match = v.textContent.match(/^([^/]+)/); // parte antes del '/'
-      if (match) times.push(match[1]);
-    });
-
-    // Devuelve los tiempos más recientes primero
+    // Devolver ordenado (recientes primero)
     return times.reverse();
   } catch (err) {
-    console.error("Error cargando tiempos de capa:", err);
+    console.error("❌ Error cargando tiempos de capa:", err);
     return [];
   }
 }
+
 
 
     // Actualiza selector según la capa activa
@@ -292,6 +312,7 @@ async function loadTimesForLayer(layerId) {
   </script>
 </body>
 </html>
+
 
 
 

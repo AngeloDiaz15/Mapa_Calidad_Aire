@@ -78,8 +78,8 @@
     <button id="stopTempoAnim" class="custom-button" disabled>Detener</button>
 
     <div style="font-size:12px; color:#444; margin-top:8px;">
+       
       Las fechas se obtienen automáticamente del servidor GIBS (NASA).  
-      Si no hay datos disponibles, puede mostrarse vacío.
     </div>
 
     <div class="legends-container" id="legendsContainer"></div>
@@ -151,6 +151,7 @@
     const dateLabel=document.getElementById("dateLabel");
 
     const validIndicators=[
+      { id:"GHRSST_L4_MUR_Sea_Surface_Temperature", name:"Temperatura - Superficie marina", legend:"https://gibs.earthdata.nasa.gov/legends/GHRSST_Sea_Surface_Temperature_H.svg" }
       { id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehído (HCHO) - Columna Vertical", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_HCHO_Vertical_Column_H.svg" },
       { id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"Dióxido de Nitrógeno (NO₂)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_NO2_Vertical_Column_Troposphere_H.svg" },
       { id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"Ozono (O₃) - Columna Troposférica", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Troposphere_Ozone_Column_H.svg" },
@@ -315,4 +316,5 @@
   </script>
 </body>
 </html>
+
 

@@ -34,6 +34,17 @@
       color:white; padding:6px 12px; border-radius:6px; font-family:sans-serif;
       font-size:14px; display:none; z-index:1200;
     }
+    .legends-container {
+      border-top:1px solid #ccc; margin-top:10px; padding-top:6px;
+    }
+    .legend-item {
+      text-align:center; margin-bottom:10px;
+    }
+    .legend-item img {
+      width:100%; max-width:320px;
+      border:1px solid #ddd; border-radius:6px;
+      background:white;
+    }
   </style>
 </head>
 <body>
@@ -81,6 +92,8 @@
       Las fechas se obtienen automáticamente del servidor GIBS (NASA).  
       Si no hay datos disponibles, puede mostrarse vacío.
     </div>
+
+    <div class="legends-container" id="legendsContainer"></div>
   </div>
 
   <div class="date-label" id="dateLabel"></div>
@@ -88,13 +101,11 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
   (async function(){
-    /* ---------------- utilidades de fecha ---------------- */
     function formatLocalDate(d){
       const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${day}`;
     }
 
-    /* ---------------- mapa base ---------------- */
     const map=L.map("map",{center:[-9.2,-75],zoom:4});
     const todayStr=formatLocalDate(new Date());
     const hour=new Date().getHours();
@@ -113,7 +124,6 @@
     satelliteLayer.addTo(map);
     let showingStreets=false;
 
-    /* ---------------- controles generales ---------------- */
     const btn=document.getElementById("toggleBtn");
     const datePicker=document.getElementById("datePicker");
     datePicker.value=todayStr; datePicker.max=todayStr;
@@ -138,7 +148,6 @@
     });
     datePicker.addEventListener("change",()=>{ if(datePicker.value) fadeToNewLayer(datePicker.value); });
 
-    /* ---------------- TEMPO GASES ---------------- */
     const indicatorsBtn=document.getElementById("indicatorsBtn");
     const indicatorsPanel=document.getElementById("indicatorsPanel");
     const closeIndicators=document.getElementById("closeIndicators");
@@ -148,12 +157,14 @@
     const startTempoAnim=document.getElementById("startTempoAnim");
     const stopTempoAnim=document.getElementById("stopTempoAnim");
     const indicatorsList=document.getElementById("indicatorsList");
+    const legendsContainer=document.getElementById("legendsContainer");
     const dateLabel=document.getElementById("dateLabel");
 
     const validIndicators=[
-      { id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehyde (L3, Vertical Column)" },
-      { id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"NO₂ (L3, Troposphere Column)" },
-      { id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"O₃ (L3, Troposphere Column)" }
+      { id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehyde (L3, Vertical Column)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_HCHO_Vertical_Column_H.svg" },
+      { id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"NO₂ (L3, Troposphere Column)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_NO2_Vertical_Column_Troposphere_H.svg" },
+      { id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"O₃ (L3, Troposphere Column)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Troposphere_Ozone_Column_H.svg" },
+      { id:"TEMPO_L3_Cloud_Cloud_Pressure_Total", name:"Clouds (L3, Cloud Pressure Total)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Cloud_Cloud_Pressure_Total_H.svg" }
     ];
 
     let indicatorLayers={};
@@ -166,8 +177,7 @@
         const res=await fetch("https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml");
         const text=await res.text();
         const xml=new DOMParser().parseFromString(text,"application/xml");
-        const layers=[...xml.querySelectorAll("Layer")];
-        const node=layers.find(l=>{
+        const node=[...xml.querySelectorAll("Layer")].find(l=>{
           const idNode=l.querySelector("ows\\:Identifier, Identifier");
           return idNode && idNode.textContent.trim()===layerId;
         });
@@ -196,8 +206,6 @@
       });
       selectedIso=times[0];
       timestampSelect.value=selectedIso;
-
-      // llenar selects de animación
       times.forEach(t=>{
         const a=document.createElement("option");
         a.value=t; a.textContent=t;
@@ -206,6 +214,19 @@
       });
       tempoStart.value=times[times.length-2]||times[0];
       tempoEnd.value=times[0];
+    }
+
+    function addLegend(id,url,name){
+      const div=document.createElement("div");
+      div.className="legend-item";
+      div.id=`legend_${id}`;
+      div.innerHTML=`<strong>${name}</strong><br><img src="${url}" alt="${name}">`;
+      legendsContainer.appendChild(div);
+    }
+
+    function removeLegend(id){
+      const el=document.getElementById(`legend_${id}`);
+      if(el) el.remove();
     }
 
     validIndicators.forEach(ind=>{
@@ -224,8 +245,10 @@
             `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${selectedIso}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
             {maxZoom:9,opacity:0.8,attribution:"NASA GIBS"}
           ).addTo(map);
+          addLegend(id,ind.legend,ind.name);
         } else if(indicatorLayers[id]){
           map.removeLayer(indicatorLayers[id]); delete indicatorLayers[id];
+          removeLegend(id);
         }
       });
     });
@@ -247,7 +270,6 @@
       }
     }
 
-    // animación
     startTempoAnim.addEventListener("click",()=>{
       if(!tempoTimes.length){alert("Selecciona un gas primero."); return;}
       const i1=tempoTimes.indexOf(tempoStart.value);
@@ -283,3 +305,5 @@
   </script>
 </body>
 </html>
+
+

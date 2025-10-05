@@ -360,9 +360,11 @@
 
 <script>
 let allMarkers = {};
+let aqicnLayer = L.layerGroup(); // capa para todos los marcadores
+aqicnLayer.addTo(map);
+
 const AQICN_TOKEN = "090ca286c1bb00d992871976d77c05b6347a17d1";
 
-// Botón principal para abrir/cerrar panel
 const btnAQICN = document.getElementById("btnAQICN");
 const aqicnPanel = document.getElementById("aqicnPanel");
 const closeAQICN = document.getElementById("closeAQICN");
@@ -375,128 +377,115 @@ btnAQICN.addEventListener("click", () => {
 });
 closeAQICN.addEventListener("click", () => aqicnPanel.style.display = "none");
 
+// Coordenadas aproximadas por país (para centrar y buscar estaciones)
+const countryBounds = {
+  us: [[24.5, -125], [49.4, -66.9]],
+  mx: [[14.5, -118], [32.7, -86.5]],
+  pe: [[-18.3, -81.3], [-0.1, -68.6]],
+  br: [[-33.7, -73.9], [5.3, -34.8]],
+  ar: [[-55, -73.6], [-21.7, -53.6]],
+  cl: [[-56, -75.6], [-17.5, -66.4]],
+  co: [[-4.2, -79], [12.4, -66.9]],
+  es: [[36, -9.4], [43.8, 4.3]],
+  fr: [[41, -5.3], [51.1, 9.7]],
+  cn: [[18, 73], [53.6, 135]]
+};
+
 // ===== CARGAR PUNTOS POR PAÍS =====
 countrySelect.addEventListener("change", async () => {
   const country = countrySelect.value;
   if (!country) return;
 
-  // Coordenadas aproximadas por país
-  const countryBounds = {
-    us: [[24.396308, -125], [49.384358, -66.93457]],
-    mx: [[14.5, -118], [32.7, -86.7]],
-    pe: [[-18.35, -81.33], [-0.04, -68.65]],
-    br: [[-33.75, -73.99], [5.27, -34.79]],
-    ar: [[-55.05, -73.58], [-21.78, -53.65]],
-    cl: [[-56, -75], [-17.5, -66.5]],
-    co: [[-4.23, -79.02], [12.44, -66.85]],
-    es: [[36, -9.5], [43.8, 3.3]],
-    fr: [[41, -5.3], [51.1, 9.6]],
-    cn: [[18, 73], [54, 135]]
-  };
+  aqicnLayer.clearLayers(); // limpia marcadores anteriores
+  searchResults.innerHTML = "<em>Loading stations...</em>";
 
+  // Centro del país
   const bounds = countryBounds[country];
-  if (!bounds) { alert("Country not supported."); return; }
-
   map.fitBounds(bounds);
 
-  await loadAQICNMonitoring(map, bounds);
-});
+  // API: lista de ciudades principales (cerca del centro)
+  const center = [
+    (bounds[0][0] + bounds[1][0]) / 2,
+    (bounds[0][1] + bounds[1][1]) / 2
+  ];
 
-// ===== BUSCAR ESTACIONES =====
-let searchTimer = null;
-searchInput.addEventListener("keyup", function () {
-  const keyword = this.value.trim();
-  if (searchTimer) clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {
-    if (keyword.length > 2) searchAQICN(keyword);
-    else searchResults.innerHTML = "";
-  }, 300);
-});
+  try {
+    const url = `https://api.waqi.info/map/bounds/?token=${AQICN_TOKEN}&latlng=${bounds[0][0]},${bounds[0][1]},${bounds[1][0]},${bounds[1][1]}`;
+    const res = await fetch(url);
+    const data = await res.json();
 
-function searchAQICN(keyword) {
-  searchResults.innerHTML = `<em>Searching "${keyword}"...</em>`;
-  fetch(`https://api.waqi.info/v2/search/?keyword=${keyword}&token=${AQICN_TOKEN}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.status !== "ok" || !data.data.length) {
-        searchResults.innerHTML = `<span>No results found.</span>`;
-        return;
-      }
-      searchResults.innerHTML = "";
-      data.data.forEach(station => {
+    if (!data.data || data.data.length === 0) {
+      searchResults.innerHTML = "<em>No monitoring stations found.</em>";
+      return;
+    }
+
+    searchResults.innerHTML = "";
+    data.data.forEach(st => {
+      const { station: name, lat, lon, aqi } = st;
+      if (lat && lon) {
+        const color = aqi <= 50 ? "green" :
+                      aqi <= 100 ? "yellow" :
+                      aqi <= 150 ? "orange" :
+                      aqi <= 200 ? "red" : "purple";
+
+        const marker = L.circleMarker([lat, lon], {
+          radius: 7, fillColor: color, color: "#333", weight: 1, fillOpacity: 0.9
+        }).bindPopup(`
+          <strong>${name}</strong><br>
+          AQI: <b>${aqi}</b><br>
+          Lat: ${lat.toFixed(2)}, Lon: ${lon.toFixed(2)}
+        `);
+
+        marker.addTo(aqicnLayer);
+        allMarkers[name.toLowerCase()] = marker;
+
         const div = document.createElement("div");
+        div.textContent = `${name} (AQI: ${aqi})`;
         div.style.cursor = "pointer";
-        div.style.padding = "4px";
-        div.style.borderBottom = "1px solid #eee";
-        div.textContent = `${station.station.name} (${station.station.country || "Unknown"})`;
         div.onclick = () => {
-          aqicnPanel.style.display = "none";
-          map.setView([station.lat, station.lon], 8);
-          showAQICNMarker(map, station);
+          map.setView([lat, lon], 10);
+          marker.openPopup();
         };
         searchResults.appendChild(div);
-      });
-    })
-    .catch(err => {
-      console.warn("Search error:", err);
-      searchResults.innerHTML = `<span>Error loading data.</span>`;
+      }
     });
-}
+  } catch (err) {
+    console.error(err);
+    searchResults.innerHTML = "<em>Error loading data.</em>";
+  }
+});
 
-// ===== CARGAR MONITOREO POR ÁREA =====
-function loadAQICNMonitoring(map, bounds) {
-  const [sw, ne] = bounds;
-  const boundsString = `${ne[0]},${sw[1]},${sw[0]},${ne[1]}`;
-  fetch(`https://api.waqi.info/v2/map/bounds/?latlng=${boundsString}&token=${AQICN_TOKEN}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.status !== "ok") throw new Error(data.data);
-      removeAQIMarkers(map);
-      data.data.forEach(station => showAQICNMarker(map, station));
-    })
-    .catch(err => console.warn("AQICN error:", err));
-}
+// ===== BUSCAR ESTACIÓN POR NOMBRE =====
+searchInput.addEventListener("input", () => {
+  const q = searchInput.value.toLowerCase().trim();
+  if (!q) return;
 
-// ===== CREAR MARCADORES =====
-function showAQICNMarker(map, station) {
-  const iw = 83, ih = 107;
-  const icon = L.icon({
-    iconUrl: `https://waqi.info/mapicon/${station.aqi}.30.png`,
-    iconSize: [iw / 2, ih / 2],
-    iconAnchor: [iw / 4, ih / 2 - 5],
+  const found = Object.keys(allMarkers).filter(name => name.includes(q));
+  searchResults.innerHTML = "";
+
+  if (found.length === 0) {
+    searchResults.innerHTML = "<em>No stations found.</em>";
+    return;
+  }
+
+  found.forEach(name => {
+    const marker = allMarkers[name];
+    const div = document.createElement("div");
+    div.textContent = name;
+    div.style.cursor = "pointer";
+    div.onclick = () => {
+      map.setView(marker.getLatLng(), 10);
+      marker.openPopup();
+    };
+    searchResults.appendChild(div);
   });
-
-  const marker = L.marker([station.lat, station.lon], {
-    icon, title: station.station.name
-  }).addTo(map);
-
-  marker.on("click", () => {
-    fetch(`https://api.waqi.info/feed/@${station.uid}/?token=${AQICN_TOKEN}`)
-      .then(r => r.json())
-      .then(info => {
-        if (info.status !== "ok") return;
-        const m = info.data;
-        let html = `<b>${m.city.name}</b><br>AQI: <b>${m.aqi}</b><br>`;
-        html += `<small>Updated: ${m.time.s}</small><br>`;
-        if (m.iaqi) {
-          html += "<b>Pollutants:</b><br>";
-          for (let p in m.iaqi) html += `${p.toUpperCase()}: ${m.iaqi[p].v}<br>`;
-        }
-        marker.bindPopup(html).openPopup();
-      });
-  });
-
-  allMarkers[station.uid] = marker;
-}
-
-function removeAQIMarkers(map) {
-  Object.values(allMarkers).forEach(m => map.removeLayer(m));
-  allMarkers = {};
-}
+});
 </script>
+
 
 </body>
 </html>
+
 
 
 

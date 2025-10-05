@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Mapa Satelital / Indicadores de Calidad de Aire (TEMPO)</title>
+  <title>Mapa Satelital + Indicadores de Calidad de Aire (TEMPO)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -154,7 +154,8 @@
       { id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehído (HCHO) - Columna Vertical", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_HCHO_Vertical_Column_H.svg" },
       { id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"Dióxido de Nitrógeno (NO₂)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_NO2_Vertical_Column_Troposphere_H.svg" },
       { id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"Ozono (O₃) - Columna Troposférica", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Troposphere_Ozone_Column_H.svg" },
-      { id:"TEMPO_L3_Cloud_Cloud_Pressure_Total", name:"Nubes - Presión Total", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Cloud_Cloud_Pressure_Total_H.svg" }
+      { id:"TEMPO_L3_Cloud_Cloud_Pressure_Total", name:"Nubes - Presión Total", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Cloud_Cloud_Pressure_Total_H.svg" },
+      { id:"GHRSST_L4_MUR_Sea_Surface_Temperature", name:"Temperatura - Superficie marina", legend:"https://gibs.earthdata.nasa.gov/legends/GHRSST_Sea_Surface_Temperature_H.svg" }
     ];
 
     let indicatorLayers={};
@@ -315,5 +316,6 @@
   </script>
 </body>
 </html>
+
 
 

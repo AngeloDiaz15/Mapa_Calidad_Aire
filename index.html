@@ -61,7 +61,7 @@
     <h4>Indicadores de aire (TEMPO)</h4>
     <label for="tempoTimestamp" style="display:block; font-size:13px; margin-bottom:4px;">🕒 Seleccionar tiempo disponible:</label>
     <select id="tempoTimestamp" style="width:100%; margin-bottom:10px;">
-      <option value="">Cargando tiempos disponibles...</option>
+      <option value="">Selecciona un indicador primero</option>
     </select>
 
     <div id="indicatorsList"></div>
@@ -76,7 +76,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
   (async function(){
-    /* ---------- utilidades de fecha ---------- */
+    /* ---------------- utilidades de fecha ---------------- */
     function formatLocalDate(d){
       const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${day}`;
@@ -87,7 +87,7 @@
       return result;
     }
 
-    /* ---------- mapa base ---------- */
+    /* ---------------- mapa base ---------------- */
     const map=L.map("map",{center:[-9.2,-75],zoom:4});
     const todayStr=formatLocalDate(new Date());
     const hour=new Date().getHours();
@@ -106,7 +106,7 @@
     satelliteLayer.addTo(map);
     let showingStreets=false;
 
-    /* ---------- controles básicos ---------- */
+    /* ---------------- controles ---------------- */
     const btn=document.getElementById("toggleBtn");
     const datePicker=document.getElementById("datePicker");
     datePicker.value=todayStr; datePicker.max=todayStr;
@@ -131,7 +131,7 @@
     });
     datePicker.addEventListener("change",()=>{ if(datePicker.value) fadeToNewLayer(datePicker.value); });
 
-    /* ---------- comparación ---------- */
+    /* ---------------- comparación ---------------- */
     const compareBtn=document.getElementById("compareBtn");
     const comparePanel=document.getElementById("comparePanel");
     const closeCompare=document.getElementById("closeCompare");
@@ -167,51 +167,66 @@
       dateLabel.style.display="none";
     });
 
-    /* ---------- TEMPO GASES ---------- */
+    /* ---------------- TEMPO GASES ---------------- */
     const indicatorsBtn=document.getElementById("indicatorsBtn");
     const indicatorsPanel=document.getElementById("indicatorsPanel");
     const timestampSelect=document.getElementById("tempoTimestamp");
     const indicatorsList=document.getElementById("indicatorsList");
 
     const validIndicators=[
-      { id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehyde (L3, Vertical Column)" },
-      { id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"NO₂ (L3, Troposphere Column)" },
-      { id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"O₃ (L3, Troposphere Column)" }
+      { id:"TEMPO_L2_Formaldehyde_Vertical_Column", name:"Formaldehyde (L2, Vertical Column)" },
+      { id:"TEMPO_L2_NO2_Vertical_Column_Troposphere", name:"NO₂ (L2, Troposphere Column)" },
+      { id:"TEMPO_L2_Ozone_Profile_Troposphere_Column", name:"O₃ (L2, Troposphere Column)" }
     ];
 
     let indicatorLayers={};
     let selectedIso=null;
 
-    // cargar timestamps disponibles desde WMTSCapabilities
-    async function loadAvailableTimes(){
+    // Carga timestamps específicos por capa TEMPO
+    async function loadTimesForLayer(layerId){
       try{
         const res=await fetch("https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml");
         const text=await res.text();
         const parser=new DOMParser();
         const xml=parser.parseFromString(text,"application/xml");
-        // buscar nodos Dimension name="Time"
-        const timeNodes=xml.querySelectorAll('Dimension[name="Time"]');
-        const timesSet=new Set();
-        timeNodes.forEach(node=>{
-          const vals=node.textContent.trim().split(',');
-          vals.forEach(v=>timesSet.add(v.trim()));
+        const layerNode=[...xml.querySelectorAll("Layer")].find(l=>l.querySelector("ows\\:Title")?.textContent.includes(layerId));
+        if(!layerNode) return [];
+        const dimNodes=layerNode.querySelectorAll("Dimension");
+        const times=[];
+        dimNodes.forEach(dim=>{
+          if(dim.querySelector("ows\\:Identifier")?.textContent==="Time"){
+            dim.querySelectorAll("Value").forEach(v=>{
+              const match=v.textContent.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/);
+              if(match) times.push(match[0]);
+            });
+          }
         });
-        const times=Array.from(timesSet).sort().reverse(); // más recientes primero
-        timestampSelect.innerHTML="";
-        times.forEach(t=>{
-          const opt=document.createElement("option");
-          opt.value=t; opt.textContent=t;
-          timestampSelect.appendChild(opt);
-        });
-        selectedIso=times[0];
-      }catch(e){
-        console.error("Error cargando tiempos:",e);
-        timestampSelect.innerHTML='<option value="">Error al cargar tiempos</option>';
+        return times.reverse();
+      }catch(err){
+        console.error("Error cargando tiempos de capa:",err);
+        return [];
       }
     }
-    await loadAvailableTimes();
 
-    // crear checkboxes de gases
+    // Actualiza selector según la capa activa
+    async function updateTimestampSelectorFor(layerId){
+      timestampSelect.innerHTML='<option>Cargando...</option>';
+      const times=await loadTimesForLayer(layerId);
+      timestampSelect.innerHTML="";
+      if(times.length===0){
+        timestampSelect.innerHTML='<option value="">Sin tiempos disponibles</option>';
+        selectedIso=null; return;
+      }
+      times.forEach(t=>{
+        const opt=document.createElement("option");
+        opt.value=t; opt.textContent=t;
+        timestampSelect.appendChild(opt);
+      });
+      selectedIso=times[0];
+      timestampSelect.value=selectedIso;
+    }
+
+    // Crear checkboxes de gases
     validIndicators.forEach(ind=>{
       const div=document.createElement("div");
       div.className="indicator-item";
@@ -219,12 +234,14 @@
                      <div class="legend">🛰️ ${ind.id}</div>`;
       indicatorsList.appendChild(div);
       const checkbox=div.querySelector("input");
-      checkbox.addEventListener("change",e=>{
-        const iso=selectedIso;
+
+      checkbox.addEventListener("change",async e=>{
         const id=ind.id;
         if(e.target.checked){
+          await updateTimestampSelectorFor(ind.name);
+          if(!selectedIso){ alert("No hay tiempos disponibles para esta capa."); return; }
           indicatorLayers[id]=L.tileLayer(
-            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${iso}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
+            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${selectedIso}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
             {maxZoom:9,opacity:0.8,attribution:"NASA GIBS"}
           ).addTo(map);
         }else if(indicatorLayers[id]){
@@ -234,7 +251,7 @@
       });
     });
 
-    // cuando se selecciona nuevo timestamp, actualizar todas las capas
+    // Cambio manual del selector
     timestampSelect.addEventListener("change",()=>{
       selectedIso=timestampSelect.value;
       updateIndicatorLayers(selectedIso);
@@ -243,7 +260,7 @@
     function updateIndicatorLayers(isoTimestamp){
       for(const id in indicatorLayers){
         const visible=map.hasLayer(indicatorLayers[id]);
-        try{map.removeLayer(indicatorLayers[id]);}catch(e){}
+        map.removeLayer(indicatorLayers[id]);
         indicatorLayers[id]=L.tileLayer(
           `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${isoTimestamp}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
           {maxZoom:9,opacity:0.8,attribution:"NASA GIBS"}
@@ -260,4 +277,3 @@
   </script>
 </body>
 </html>
-

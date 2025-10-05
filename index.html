@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Mapa Satelital + Indicadores de Calidad de Aire (TEMPO)</title>
+  <title>Map with air indicators</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -53,33 +53,33 @@
 
   <div class="controls">
     <input type="date" id="datePicker" class="custom-button" />
-    <button class="custom-button" id="toggleBtn">Ver Calles</button>
-    <button class="custom-button" id="indicatorsBtn">Gases (TEMPO)</button>
+    <button class="custom-button" id="toggleBtn">Switch to street map</button>
+    <button class="custom-button" id="indicatorsBtn">Indicators view</button>
   </div>
 
   <div class="indicators-panel" id="indicatorsPanel">
     <button class="indicators-close" id="closeIndicators">×</button>
-    <h4>Indicadores de aire (TEMPO)</h4>
+    <h4>Indicators)</h4>
 
-    <label for="tempoTimestamp" style="display:block; font-size:13px; margin-bottom:4px;">🕒 Seleccionar tiempo disponible:</label>
+    <label for="tempoTimestamp" style="display:block; font-size:13px; margin-bottom:4px;">🕒 Select available time:</label>
     <select id="tempoTimestamp" style="width:100%; margin-bottom:10px;">
-      <option value="">Selecciona un indicador primero</option>
+      <option value="">Select an indicator first</option>
     </select>
 
     <div id="indicatorsList"></div>
 
     <hr>
-    <h5 style="margin:8px 0 4px;">Animación de gases</h5>
+    <h5 style="margin:8px 0 4px;">Animation</h5>
     <label>Inicio:</label>
     <select id="tempoStart" style="width:100%; margin-bottom:4px;"></select>
     <label>Fin:</label>
     <select id="tempoEnd" style="width:100%; margin-bottom:8px;"></select>
-    <button id="startTempoAnim" class="custom-button">Iniciar animación</button>
-    <button id="stopTempoAnim" class="custom-button" disabled>Detener</button>
+    <button id="startTempoAnim" class="custom-button">Start</button>
+    <button id="stopTempoAnim" class="custom-button" disabled>Stop</button>
 
     <div style="font-size:12px; color:#444; margin-top:8px;">
-      Las fechas se obtienen automáticamente del servidor GIBS (NASA).  
-      Si no hay datos disponibles, puede mostrarse vacío.
+      Dates are automatically retrieved from the GIBS (NASA) server.
+      If no data is available, it may appear empty.
     </div>
 
     <div class="legends-container" id="legendsContainer"></div>
@@ -151,11 +151,11 @@
     const dateLabel=document.getElementById("dateLabel");
 
     const validIndicators=[
-      { id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehído (HCHO) - Columna Vertical", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_HCHO_Vertical_Column_H.svg" },
-      { id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"Dióxido de Nitrógeno (NO₂)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_NO2_Vertical_Column_Troposphere_H.svg" },
-      { id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"Ozono (O₃) - Columna Troposférica", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Troposphere_Ozone_Column_H.svg" },
-      { id:"TEMPO_L3_Cloud_Cloud_Pressure_Total", name:"Nubes - Presión Total", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Cloud_Cloud_Pressure_Total_H.svg" },
-      { id:"GHRSST_L4_MUR_Sea_Surface_Temperature", name:"Temperatura - Superficie marina", legend:"https://gibs.earthdata.nasa.gov/legends/GHRSST_Sea_Surface_Temperature_H.svg" }
+      { id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehyde (L3, Vertical Column, Subdaily, TEMPO)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_HCHO_Vertical_Column_H.svg" },
+      { id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"Nitrogen Dioxide (L3, Vertical Column Stratosphere, Subdaily, TEMPO)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_NO2_Vertical_Column_Troposphere_H.svg" },
+      { id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"Ozone Profile (L3, Troposphere Column, Subdaily, TEMPO)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Troposphere_Ozone_Column_H.svg" },
+      { id:"TEMPO_L3_Cloud_Cloud_Pressure_Total", name:"Clouds (L3, Cloud Pressure Total, Subdaily, TEMPO)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Cloud_Cloud_Pressure_Total_H.svg" },
+      { id:"GHRSST_L4_MUR_Sea_Surface_Temperature", name:"Sea Surface Temperature (L4, MUR Global Foundation, GHRSST)", legend:"https://gibs.earthdata.nasa.gov/legends/GHRSST_Sea_Surface_Temperature_H.svg" }
     ];
 
     let indicatorLayers={};
@@ -181,14 +181,14 @@
     }
 
     async function updateTimestampSelectorFor(layerId){
-      timestampSelect.innerHTML='<option>Cargando...</option>';
+      timestampSelect.innerHTML='<option>Loading...</option>';
       tempoStart.innerHTML="";
       tempoEnd.innerHTML="";
       const times=await loadTimesForLayer(layerId);
       tempoTimes=times;
       timestampSelect.innerHTML="";
       if(times.length===0){
-        timestampSelect.innerHTML='<option value="">Sin tiempos disponibles</option>';
+        timestampSelect.innerHTML='<option value="">No available times</option>';
         return;
       }
       times.forEach(t=>{
@@ -231,7 +231,7 @@
         const id=ind.id;
         if(e.target.checked){
           await updateTimestampSelectorFor(ind.id);
-          if(!selectedIso){alert("No hay tiempos disponibles para esta capa."); return;}
+          if(!selectedIso){alert("No available times for this layer."); return;}
           indicatorLayers[id]=L.tileLayer(
             `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${selectedIso}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
             {maxZoom:9,opacity:0.8,attribution:"NASA GIBS"}
@@ -276,12 +276,12 @@
 
     // ✅ Animación corregida: orden cronológico (inicio → fin)
     startTempoAnim.addEventListener("click",()=>{
-      if(!tempoTimes.length){alert("Selecciona un gas primero."); return;}
+      if(!tempoTimes.length){alert("Select a gas first."); return;}
       const i1=tempoTimes.indexOf(tempoStart.value);
       const i2=tempoTimes.indexOf(tempoEnd.value);
-      if(i1===-1||i2===-1){alert("Selecciona fechas válidas."); return;}
+      if(i1===-1||i2===-1){alert("Select valid dates."); return;}
       let subset=tempoTimes.slice(Math.min(i1,i2),Math.max(i1,i2)+1);
-      if(subset.length===0){alert("Rango vacío."); return;}
+      if(subset.length===0){alert("Empty range."); return;}
 
       clearInterval(tempoTimer); // limpia si ya hay uno activo
       let idx=0;
@@ -316,6 +316,7 @@
   </script>
 </body>
 </html>
+
 
 
 

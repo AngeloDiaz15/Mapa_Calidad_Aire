@@ -183,30 +183,45 @@
     let selectedIso=null;
 
     // Carga timestamps específicos por capa TEMPO
-    async function loadTimesForLayer(layerId){
-      try{
-        const res=await fetch("https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml");
-        const text=await res.text();
-        const parser=new DOMParser();
-        const xml=parser.parseFromString(text,"application/xml");
-        const layerNode=[...xml.querySelectorAll("Layer")].find(l=>l.querySelector("ows\\:Title")?.textContent.includes(layerId));
-        if(!layerNode) return [];
-        const dimNodes=layerNode.querySelectorAll("Dimension");
-        const times=[];
-        dimNodes.forEach(dim=>{
-          if(dim.querySelector("ows\\:Identifier")?.textContent==="Time"){
-            dim.querySelectorAll("Value").forEach(v=>{
-              const match=v.textContent.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/);
-              if(match) times.push(match[0]);
-            });
-          }
-        });
-        return times.reverse();
-      }catch(err){
-        console.error("Error cargando tiempos de capa:",err);
-        return [];
-      }
+   // Carga timestamps específicos por capa TEMPO
+async function loadTimesForLayer(layerId) {
+  try {
+    const res = await fetch("https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml");
+    const text = await res.text();
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(text, "application/xml");
+
+    // Busca el nodo Layer exacto por su Identifier
+    const layerNode = [...xml.querySelectorAll("Layer")]
+      .find(l => l.querySelector("ows\\:Identifier")?.textContent.trim() === layerId);
+
+    if (!layerNode) {
+      console.warn("Capa no encontrada en WMTSCapabilities:", layerId);
+      return [];
     }
+
+    // Busca el bloque de Dimension que contenga los tiempos
+    const dimNode = [...layerNode.querySelectorAll("Dimension")]
+      .find(d => d.querySelector("ows\\:Identifier")?.textContent === "Time");
+    if (!dimNode) return [];
+
+    // Extrae los valores de tiempo de cada <Value>
+    const valueNodes = dimNode.querySelectorAll("Value");
+    const times = [];
+
+    valueNodes.forEach(v => {
+      const match = v.textContent.match(/^([^/]+)/); // parte antes del '/'
+      if (match) times.push(match[1]);
+    });
+
+    // Devuelve los tiempos más recientes primero
+    return times.reverse();
+  } catch (err) {
+    console.error("Error cargando tiempos de capa:", err);
+    return [];
+  }
+}
+
 
     // Actualiza selector según la capa activa
     async function updateTimestampSelectorFor(layerId){
@@ -238,7 +253,7 @@
       checkbox.addEventListener("change",async e=>{
         const id=ind.id;
         if(e.target.checked){
-          await updateTimestampSelectorFor(ind.name);
+          await updateTimestampSelectorFor(ind.id);
           if(!selectedIso){ alert("No hay tiempos disponibles para esta capa."); return; }
           indicatorLayers[id]=L.tileLayer(
             `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${selectedIso}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
@@ -277,3 +292,4 @@
   </script>
 </body>
 </html>
+

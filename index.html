@@ -75,7 +75,9 @@
   </div>
 
   <div class="indicators-panel" id="indicatorsPanel">
-    <h4>Indicadores de aire</h4>
+    <h4>Indicadores de aire (TEMPO)</h4>
+    <label>📅 Fecha del indicador:</label>
+    <input type="date" id="tempoDate" style="width:100%; margin-bottom:10px;">
     <div id="indicatorsList"></div>
   </div>
 
@@ -119,8 +121,10 @@
     const comparePanel=document.getElementById("comparePanel");
     const closeCompare=document.getElementById("closeCompare");
     const indicatorsPanel=document.getElementById("indicatorsPanel");
+    const tempoDate=document.getElementById("tempoDate");
     const dateLabel=document.getElementById("dateLabel");
     datePicker.value=todayStr; datePicker.max=todayStr;
+    tempoDate.value=todayStr; tempoDate.max=todayStr;
     let showingStreets=false;
 
     async function fadeToNewLayer(dateStr){
@@ -206,11 +210,10 @@
 
       const checkbox = div.querySelector("input");
       checkbox.addEventListener("change", e => {
-        const date = datePicker.value || todayStr;
+        const date = tempoDate.value || todayStr;
         const id = ind.id;
 
         if (e.target.checked) {
-          if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
           indicatorLayers[id] = L.tileLayer(
             `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${date}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
             { maxZoom: 9, opacity: 1, attribution: "NASA GIBS" }
@@ -218,9 +221,6 @@
         } else if (indicatorLayers[id]) {
           map.removeLayer(indicatorLayers[id]);
           delete indicatorLayers[id];
-          if (Object.keys(indicatorLayers).length === 0 && !map.hasLayer(satelliteLayer)) {
-            map.addLayer(satelliteLayer);
-          }
         }
       });
     });
@@ -236,18 +236,19 @@
             ).addTo(map);
           }
         }
-      } else if (!map.hasLayer(satelliteLayer)) {
-        map.addLayer(satelliteLayer);
       }
     }
 
-    indicatorsBtn.addEventListener("click",()=>{ indicatorsPanel.style.display=indicatorsPanel.style.display==="none"?"block":"none"; });
+    tempoDate.addEventListener("change", () => {
+      const newDate = tempoDate.value || todayStr;
+      updateIndicatorLayers(newDate);
+    });
+
+    indicatorsBtn.addEventListener("click",()=>{ 
+      indicatorsPanel.style.display = indicatorsPanel.style.display==="none"?"block":"none"; 
+    });
 
   })();
   </script>
 </body>
 </html>
-
-
-
-

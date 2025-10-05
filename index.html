@@ -19,9 +19,10 @@
     .indicators-panel {
       position:absolute; top:60px; left:10px; width:340px;
       max-height:80%; overflow-y:auto; background:white;
-      border:1px solid #ccc; border-radius:8px; padding:10px;
+      border:1px solid #ccc; border-radius:8px; padding:10px 12px;
       box-shadow:0 2px 6px rgba(0,0,0,0.3); font-family:sans-serif;
       z-index:1100; display:none;
+      scrollbar-width: thin;
     }
     .indicators-close {
       position:absolute; top:5px; right:8px; background:#eee; border:none;
@@ -174,7 +175,7 @@
         const dim=node.querySelector("Dimension, ows\\:Dimension");
         if(!dim) return [];
         const values=[...dim.querySelectorAll("Value")].map(v=>v.textContent.match(/^([^/]+)/)?.[1]).filter(Boolean);
-        return values.reverse();
+        return values; // ya en orden cronológico del servidor
       } catch(e){console.error(e); return [];}
     }
 
@@ -193,7 +194,7 @@
         const o=document.createElement("option");
         o.value=t; o.textContent=t; timestampSelect.appendChild(o);
       });
-      selectedIso=times[0];
+      selectedIso=times[times.length-1];
       timestampSelect.value=selectedIso;
       times.forEach(t=>{
         const a=document.createElement("option");
@@ -201,8 +202,8 @@
         tempoStart.appendChild(a.cloneNode(true));
         tempoEnd.appendChild(a);
       });
-      tempoStart.value=times[times.length-2]||times[0];
-      tempoEnd.value=times[0];
+      tempoStart.value=times[0];
+      tempoEnd.value=times[times.length-1];
     }
 
     function addLegend(id,url,name){
@@ -251,7 +252,6 @@
       for(const id in indicatorLayers){
         const vis=map.hasLayer(indicatorLayers[id]);
         if(vis){
-          // transición suave
           const oldLayer=indicatorLayers[id];
           const newLayer=L.tileLayer(
             `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${iso}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
@@ -273,23 +273,29 @@
       }
     }
 
+    // ✅ Animación corregida: orden cronológico (inicio → fin)
     startTempoAnim.addEventListener("click",()=>{
       if(!tempoTimes.length){alert("Selecciona un gas primero."); return;}
       const i1=tempoTimes.indexOf(tempoStart.value);
       const i2=tempoTimes.indexOf(tempoEnd.value);
       if(i1===-1||i2===-1){alert("Selecciona fechas válidas."); return;}
-      const subset=tempoTimes.slice(Math.min(i1,i2),Math.max(i1,i2)+1);
+      let subset=tempoTimes.slice(Math.min(i1,i2),Math.max(i1,i2)+1);
       if(subset.length===0){alert("Rango vacío."); return;}
+
+      clearInterval(tempoTimer); // limpia si ya hay uno activo
       let idx=0;
       startTempoAnim.disabled=true; stopTempoAnim.disabled=false;
       dateLabel.style.display="block";
+
       function animate(){
         const t=subset[idx];
         selectedIso=t;
         updateIndicatorLayers(t);
         dateLabel.textContent=`🕒 ${t}`;
-        idx=(idx+1)%subset.length;
+        idx++;
+        if(idx>=subset.length) idx=0;
       }
+
       animate();
       tempoTimer=setInterval(animate,2500);
     });
@@ -309,6 +315,4 @@
   </script>
 </body>
 </html>
-
-
 

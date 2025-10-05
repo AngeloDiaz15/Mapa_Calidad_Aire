@@ -55,6 +55,7 @@
     <input type="date" id="datePicker" class="custom-button" />
     <button class="custom-button" id="toggleBtn">Switch to street map</button>
     <button class="custom-button" id="indicatorsBtn">Indicators view</button>
+    <button id="btnAQICN">Monitoring points</button>
   </div>
 
   <div class="indicators-panel" id="indicatorsPanel">
@@ -96,6 +97,10 @@
     }
 
     const map=L.map("map",{center:[-9.2,-75],zoom:4});
+    document.getElementById("btnAQICN").addEventListener("click", () => {
+  loadAQICNMonitoring(map);
+});
+
     const todayStr=formatLocalDate(new Date());
     const hour=new Date().getHours();
 
@@ -312,10 +317,70 @@
       indicatorsPanel.style.display=indicatorsPanel.style.display==="none"?"block":"none";
     });
     closeIndicators.addEventListener("click",()=>{indicatorsPanel.style.display="none";});
-  })();
+  })();  
   </script>
+ 
+  //MONITORING POINTS (AQICN)
+<script>
+let allMarkers = {};
+
+function loadAQICNMonitoring(map) {
+  const token = "090ca286c1bb00d992871976d77c05b6347a17d1"; // ⚠️ Reemplaza con tu token real de AQICN
+  const bounds = map.getBounds();
+  const boundsString = `${bounds.getNorth()},${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()}`;
+
+  fetch(`https://api.waqi.info/v2/map/bounds/?latlng=${boundsString}&token=${token}`)
+    .then((res) => res.json())
+    .then((data) => {
+      if (data.status !== "ok") throw new Error(data.data);
+      removeAQIMarkers(map);
+      data.data.forEach((station) => {
+        const iw = 83, ih = 107;
+        const icon = L.icon({
+          iconUrl: `https://waqi.info/mapicon/${station.aqi}.30.png`,
+          iconSize: [iw / 2, ih / 2],
+          iconAnchor: [iw / 4, ih / 2 - 5],
+        });
+        const marker = L.marker([station.lat, station.lon], {
+          icon,
+          title: station.station.name,
+        }).addTo(map);
+
+        marker.on("click", () => {
+          fetch(`https://api.waqi.info/feed/@${station.uid}/?token=${token}`)
+            .then((r) => r.json())
+            .then((info) => {
+              if (info.status !== "ok") return;
+              const m = info.data;
+              let html = `<b>${m.city.name}</b><br>AQI: <b>${m.aqi}</b><br>`;
+              html += `<small>Updated: ${new Date(m.time.v * 1000).toLocaleTimeString()}</small><br>`;
+              if (m.iaqi) {
+                html += "<b>Pollutants:</b><br>";
+                for (let p in m.iaqi) {
+                  html += `${p.toUpperCase()}: ${m.iaqi[p].v}<br>`;
+                }
+              }
+              marker.bindPopup(html).openPopup();
+            });
+        });
+
+        allMarkers[station.uid] = marker;
+      });
+    })
+    .catch((err) => {
+      console.warn("Error AQICN:", err);
+    });
+}
+
+function removeAQIMarkers(map) {
+  Object.values(allMarkers).forEach((m) => map.removeLayer(m));
+  allMarkers = {};
+}
+</script>
+
 </body>
 </html>
+
 
 
 

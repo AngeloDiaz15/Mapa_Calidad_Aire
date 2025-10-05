@@ -358,133 +358,151 @@
   <div id="searchResults" style="margin-top:10px; font-size:13px; max-height:250px; overflow-y:auto;"></div>
 </div>
 
+<!-- Asegúrate de que esta línea esté después de crear el mapa principal -->
 <script>
-let allMarkers = {};
-let aqicnLayer = L.layerGroup(); // capa para todos los marcadores
-aqicnLayer.addTo(map);
-
-const AQICN_TOKEN = "090ca286c1bb00d992871976d77c05b6347a17d1";
-
-const btnAQICN = document.getElementById("btnAQICN");
-const aqicnPanel = document.getElementById("aqicnPanel");
-const closeAQICN = document.getElementById("closeAQICN");
-const countrySelect = document.getElementById("countrySelect");
-const searchInput = document.getElementById("searchInput");
-const searchResults = document.getElementById("searchResults");
-
-btnAQICN.addEventListener("click", () => {
-  aqicnPanel.style.display = aqicnPanel.style.display === "none" ? "block" : "none";
-});
-closeAQICN.addEventListener("click", () => aqicnPanel.style.display = "none");
-
-// Coordenadas aproximadas por país (para centrar y buscar estaciones)
-const countryBounds = {
-  us: [[24.5, -125], [49.4, -66.9]],
-  mx: [[14.5, -118], [32.7, -86.5]],
-  pe: [[-18.3, -81.3], [-0.1, -68.6]],
-  br: [[-33.7, -73.9], [5.3, -34.8]],
-  ar: [[-55, -73.6], [-21.7, -53.6]],
-  cl: [[-56, -75.6], [-17.5, -66.4]],
-  co: [[-4.2, -79], [12.4, -66.9]],
-  es: [[36, -9.4], [43.8, 4.3]],
-  fr: [[41, -5.3], [51.1, 9.7]],
-  cn: [[18, 73], [53.6, 135]]
-};
-
-// ===== CARGAR PUNTOS POR PAÍS =====
-countrySelect.addEventListener("change", async () => {
-  const country = countrySelect.value;
-  if (!country) return;
-
-  aqicnLayer.clearLayers(); // limpia marcadores anteriores
-  searchResults.innerHTML = "<em>Loading stations...</em>";
-
-  // Centro del país
-  const bounds = countryBounds[country];
-  map.fitBounds(bounds);
-
-  // API: lista de ciudades principales (cerca del centro)
-  const center = [
-    (bounds[0][0] + bounds[1][0]) / 2,
-    (bounds[0][1] + bounds[1][1]) / 2
-  ];
-
-  try {
-    const url = `https://api.waqi.info/map/bounds/?token=${AQICN_TOKEN}&latlng=${bounds[0][0]},${bounds[0][1]},${bounds[1][0]},${bounds[1][1]}`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (!data.data || data.data.length === 0) {
-      searchResults.innerHTML = "<em>No monitoring stations found.</em>";
-      return;
-    }
-
-    searchResults.innerHTML = "";
-    data.data.forEach(st => {
-      const { station: name, lat, lon, aqi } = st;
-      if (lat && lon) {
-        const color = aqi <= 50 ? "green" :
-                      aqi <= 100 ? "yellow" :
-                      aqi <= 150 ? "orange" :
-                      aqi <= 200 ? "red" : "purple";
-
-        const marker = L.circleMarker([lat, lon], {
-          radius: 7, fillColor: color, color: "#333", weight: 1, fillOpacity: 0.9
-        }).bindPopup(`
-          <strong>${name}</strong><br>
-          AQI: <b>${aqi}</b><br>
-          Lat: ${lat.toFixed(2)}, Lon: ${lon.toFixed(2)}
-        `);
-
-        marker.addTo(aqicnLayer);
-        allMarkers[name.toLowerCase()] = marker;
-
-        const div = document.createElement("div");
-        div.textContent = `${name} (AQI: ${aqi})`;
-        div.style.cursor = "pointer";
-        div.onclick = () => {
-          map.setView([lat, lon], 10);
-          marker.openPopup();
-        };
-        searchResults.appendChild(div);
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    searchResults.innerHTML = "<em>Error loading data.</em>";
-  }
-});
-
-// ===== BUSCAR ESTACIÓN POR NOMBRE =====
-searchInput.addEventListener("input", () => {
-  const q = searchInput.value.toLowerCase().trim();
-  if (!q) return;
-
-  const found = Object.keys(allMarkers).filter(name => name.includes(q));
-  searchResults.innerHTML = "";
-
-  if (found.length === 0) {
-    searchResults.innerHTML = "<em>No stations found.</em>";
+// ====== Asegurar acceso global al mapa ======
+window.addEventListener("DOMContentLoaded", () => {
+  // Si ya tienes tu variable `map` creada en otro script, la recuperamos
+  if (typeof map === "undefined") {
+    console.error("❌ El mapa principal no está definido antes de este script.");
     return;
   }
 
-  found.forEach(name => {
-    const marker = allMarkers[name];
-    const div = document.createElement("div");
-    div.textContent = name;
-    div.style.cursor = "pointer";
-    div.onclick = () => {
-      map.setView(marker.getLatLng(), 10);
-      marker.openPopup();
-    };
-    searchResults.appendChild(div);
+  // Capa para los puntos de monitoreo AQICN
+  let aqicnLayer = L.layerGroup().addTo(map);
+  let allMarkers = {};
+
+  const AQICN_TOKEN = "090ca286c1bb00d992871976d77c05b6347a17d1";
+
+  const btnAQICN = document.getElementById("btnAQICN");
+  const aqicnPanel = document.getElementById("aqicnPanel");
+  const closeAQICN = document.getElementById("closeAQICN");
+  const countrySelect = document.getElementById("countrySelect");
+  const searchInput = document.getElementById("searchInput");
+  const searchResults = document.getElementById("searchResults");
+
+  btnAQICN.addEventListener("click", () => {
+    aqicnPanel.style.display =
+      aqicnPanel.style.display === "none" ? "block" : "none";
+  });
+
+  closeAQICN.addEventListener("click", () => (aqicnPanel.style.display = "none"));
+
+  // ====== Coordenadas aproximadas por país ======
+  const countryBounds = {
+    us: [[24.5, -125], [49.4, -66.9]],
+    mx: [[14.5, -118], [32.7, -86.5]],
+    pe: [[-18.3, -81.3], [-0.1, -68.6]],
+    br: [[-33.7, -73.9], [5.3, -34.8]],
+    ar: [[-55, -73.6], [-21.7, -53.6]],
+    cl: [[-56, -75.6], [-17.5, -66.4]],
+    co: [[-4.2, -79], [12.4, -66.9]],
+    es: [[36, -9.4], [43.8, 4.3]],
+    fr: [[41, -5.3], [51.1, 9.7]],
+    cn: [[18, 73], [53.6, 135]],
+  };
+
+  // ====== CARGAR PUNTOS POR PAÍS ======
+  countrySelect.addEventListener("change", async () => {
+    const country = countrySelect.value;
+    if (!country) return;
+
+    aqicnLayer.clearLayers();
+    searchResults.innerHTML = "<em>Loading stations...</em>";
+
+    const bounds = countryBounds[country];
+    map.fitBounds(bounds);
+
+    const url = `https://api.waqi.info/map/bounds/?token=${AQICN_TOKEN}&latlng=${bounds[0][0]},${bounds[0][1]},${bounds[1][0]},${bounds[1][1]}`;
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (!data.data || data.data.length === 0) {
+        searchResults.innerHTML = "<em>No monitoring stations found.</em>";
+        return;
+      }
+
+      searchResults.innerHTML = "";
+      data.data.forEach((st) => {
+        const { station, lat, lon, aqi } = st;
+        if (lat && lon) {
+          const color =
+            aqi <= 50
+              ? "green"
+              : aqi <= 100
+              ? "yellow"
+              : aqi <= 150
+              ? "orange"
+              : aqi <= 200
+              ? "red"
+              : "purple";
+
+          const marker = L.circleMarker([lat, lon], {
+            radius: 7,
+            fillColor: color,
+            color: "#333",
+            weight: 1,
+            fillOpacity: 0.9,
+          }).bindPopup(`
+            <strong>${station.name}</strong><br>
+            AQI: <b>${aqi}</b><br>
+            Lat: ${lat.toFixed(2)}, Lon: ${lon.toFixed(2)}
+          `);
+
+          marker.addTo(aqicnLayer);
+          allMarkers[station.name.toLowerCase()] = marker;
+
+          const div = document.createElement("div");
+          div.textContent = `${station.name} (AQI: ${aqi})`;
+          div.style.cursor = "pointer";
+          div.onclick = () => {
+            map.setView([lat, lon], 10);
+            marker.openPopup();
+          };
+          searchResults.appendChild(div);
+        }
+      });
+    } catch (err) {
+      console.error(err);
+      searchResults.innerHTML = "<em>Error loading data.</em>";
+    }
+  });
+
+  // ====== BUSCAR ESTACIÓN POR NOMBRE ======
+  searchInput.addEventListener("input", () => {
+    const q = searchInput.value.toLowerCase().trim();
+    if (!q) return;
+
+    const found = Object.keys(allMarkers).filter((name) => name.includes(q));
+    searchResults.innerHTML = "";
+
+    if (found.length === 0) {
+      searchResults.innerHTML = "<em>No stations found.</em>";
+      return;
+    }
+
+    found.forEach((name) => {
+      const marker = allMarkers[name];
+      const div = document.createElement("div");
+      div.textContent = name;
+      div.style.cursor = "pointer";
+      div.onclick = () => {
+        map.setView(marker.getLatLng(), 10);
+        marker.openPopup();
+      };
+      searchResults.appendChild(div);
+    });
   });
 });
 </script>
 
 
+
 </body>
 </html>
+
 
 
 

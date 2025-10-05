@@ -59,7 +59,7 @@
 
   <div class="indicators-panel" id="indicatorsPanel">
     <button class="indicators-close" id="closeIndicators">×</button>
-    <h4>Indicators)</h4>
+    <h4>--Indicators--</h4>
 
     <label for="tempoTimestamp" style="display:block; font-size:13px; margin-bottom:4px;">🕒 Select available time:</label>
     <select id="tempoTimestamp" style="width:100%; margin-bottom:10px;">
@@ -70,9 +70,9 @@
 
     <hr>
     <h5 style="margin:8px 0 4px;">Animation</h5>
-    <label>Inicio:</label>
+    <label>Start:</label>
     <select id="tempoStart" style="width:100%; margin-bottom:4px;"></select>
-    <label>Fin:</label>
+    <label>Stop:</label>
     <select id="tempoEnd" style="width:100%; margin-bottom:8px;"></select>
     <button id="startTempoAnim" class="custom-button">Start</button>
     <button id="stopTempoAnim" class="custom-button" disabled>Stop</button>
@@ -129,10 +129,10 @@
     btn.addEventListener("click",()=>{
       if(showingStreets){
         map.removeLayer(streets); map.addLayer(satelliteLayer);
-        btn.textContent="Ver Calles"; showingStreets=false;
+        btn.textContent="Switch to street map"; showingStreets=false;
       } else {
         map.removeLayer(satelliteLayer); map.addLayer(streets);
-        btn.textContent="Ver Satélite"; showingStreets=true;
+        btn.textContent="Switch to satellite map"; showingStreets=true;
       }
     });
     datePicker.addEventListener("change",()=>{ if(datePicker.value) fadeToNewLayer(datePicker.value); });
@@ -316,6 +316,7 @@
   </script>
 </body>
 </html>
+
 
 
 

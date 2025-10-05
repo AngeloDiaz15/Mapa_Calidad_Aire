@@ -35,7 +35,7 @@
     .indicators-panel {
       position:absolute; top:60px; left:10px;
       background:white; border:1px solid #ccc; border-radius:8px;
-      padding:10px; width:280px; max-height:80%; overflow-y:auto;
+      padding:10px; width:320px; max-height:80%; overflow-y:auto;
       font-family:sans-serif; box-shadow:0 2px 6px rgba(0,0,0,0.3);
       display:none; z-index:1100;
     }
@@ -76,9 +76,28 @@
 
   <div class="indicators-panel" id="indicatorsPanel">
     <h4>Indicadores de aire (TEMPO)</h4>
-    <label>📅 Fecha del indicador:</label>
-    <input type="date" id="tempoDate" style="width:100%; margin-bottom:10px;">
+
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+      <div style="flex:1">
+        <label style="display:block; font-size:13px;">📅 Fecha (TEMPO)</label>
+        <input type="date" id="tempoDate" style="width:100%; margin-bottom:4px;">
+      </div>
+      <div style="width:140px;">
+        <label style="display:block; font-size:13px;">⏱ Hora (UTC)</label>
+        <!-- step=1 to allow seconds -->
+        <input type="time" id="tempoTime" step="1" style="width:100%; margin-bottom:4px;">
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <button id="setNowUtc" class="custom-button" style="flex:1">Ahora (UTC)</button>
+      <button id="setMidnight" class="custom-button" style="flex:1">00:00:00Z</button>
+    </div>
+
     <div id="indicatorsList"></div>
+    <div style="font-size:12px; color:#444; margin-top:8px;">
+      Nota: GIBS requiere timestamp ISO8601 completo, p.ej. <code>2025-10-02T23:11:48Z</code>.
+      Si no hay tiles para ese instante exacto puede aparecer un fondo vacío.
+    </div>
   </div>
 
   <div class="date-label" id="dateLabel"></div>
@@ -86,9 +105,27 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
   (async function(){
+    /* ---------- utilidades de fecha/hora ---------- */
     function formatLocalDate(d){
       const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${day}`;
+    }
+    function getUtcTimeString(){
+      const now = new Date();
+      const hh = String(now.getUTCHours()).padStart(2,'0');
+      const mm = String(now.getUTCMinutes()).padStart(2,'0');
+      const ss = String(now.getUTCSeconds()).padStart(2,'0');
+      return `${hh}:${mm}:${ss}`;
+    }
+    function buildIsoTimestamp(dateStr, timeStr){
+      // dateStr: 'YYYY-MM-DD', timeStr: 'HH:MM' or 'HH:MM:SS'
+      const d = dateStr || formatLocalDate(new Date());
+      let t = timeStr || '00:00:00';
+      const parts = t.split(':');
+      const hh = String(parts[0] || '00').padStart(2,'0');
+      const mm = String(parts[1] || '00').padStart(2,'0');
+      const ss = String(parts[2] || '00').padStart(2,'0');
+      return `${d}T${hh}:${mm}:${ss}Z`;
     }
     function dateRange(start,end){
       const result=[]; let c=new Date(start);
@@ -96,6 +133,7 @@
       return result;
     }
 
+    /* ---------- mapa y capas base ---------- */
     const mapCenter=[-9.2,-75];
     const map=L.map("map",{center:mapCenter,zoom:4});
     const todayStr=formatLocalDate(new Date());
@@ -114,6 +152,7 @@
     let satelliteLayer=(hour>=6&&hour<18)?modis:viirs;
     satelliteLayer.addTo(map);
 
+    /* ---------- elementos DOM ---------- */
     const btn=document.getElementById("toggleBtn");
     const datePicker=document.getElementById("datePicker");
     const compareBtn=document.getElementById("compareBtn");
@@ -122,9 +161,13 @@
     const closeCompare=document.getElementById("closeCompare");
     const indicatorsPanel=document.getElementById("indicatorsPanel");
     const tempoDate=document.getElementById("tempoDate");
+    const tempoTime=document.getElementById("tempoTime");
+    const setNowUtc=document.getElementById("setNowUtc");
+    const setMidnight=document.getElementById("setMidnight");
     const dateLabel=document.getElementById("dateLabel");
     datePicker.value=todayStr; datePicker.max=todayStr;
     tempoDate.value=todayStr; tempoDate.max=todayStr;
+    tempoTime.value=getUtcTimeString();
     let showingStreets=false;
 
     async function fadeToNewLayer(dateStr){
@@ -135,11 +178,11 @@
       if(container){
         container.classList.add("fade-layer");
         setTimeout(()=>container.classList.add("visible"),50);
-        setTimeout(()=>{ map.removeLayer(satelliteLayer); satelliteLayer=nextLayer; updateIndicatorLayers(dateStr); },1500);
+        setTimeout(()=>{ map.removeLayer(satelliteLayer); satelliteLayer=nextLayer; updateIndicatorLayers(buildIsoTimestamp(tempoDate.value, tempoTime.value)); },1500);
       } else {
         map.removeLayer(satelliteLayer);
         satelliteLayer=nextLayer;
-        updateIndicatorLayers(dateStr);
+        updateIndicatorLayers(buildIsoTimestamp(tempoDate.value, tempoTime.value));
       }
     }
 
@@ -191,7 +234,7 @@
       dateLabel.style.display="none";
     });
 
-    // ---- Indicadores funcionales ----
+    /* ---------- Indicadores TEMPO (con timestamp ISO) ---------- */
     const validIndicators = [
       { id: "TEMPO_L3_Formaldehyde_Vertical_Column", name: "Formaldehyde (L3, Vertical Column, Subdaily, TEMPO)" },
       { id: "TEMPO_L3_NO2_Vertical_Column_Troposphere", name: "Nitrogen Dioxide (L3, Vertical Column Troposphere, Subdaily, TEMPO)" },
@@ -199,8 +242,9 @@
     ];
 
     const list = document.getElementById("indicatorsList");
-    const indicatorLayers = {};
+    const indicatorLayers = {}; // { id: L.tileLayer(...) }
 
+    // crear UI de checkboxes
     validIndicators.forEach(ind => {
       const div = document.createElement("div");
       div.className = "indicator-item";
@@ -210,38 +254,66 @@
 
       const checkbox = div.querySelector("input");
       checkbox.addEventListener("change", e => {
-        const date = tempoDate.value || todayStr;
+        const iso = buildIsoTimestamp(tempoDate.value || todayStr, tempoTime.value || getUtcTimeString());
         const id = ind.id;
 
         if (e.target.checked) {
+          // al activar, ocultar la capa satélite principal (opcional)
+          if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
+
+          // crear la tile con timestamp ISO completo
           indicatorLayers[id] = L.tileLayer(
-            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${date}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
+            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${iso}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
             { maxZoom: 9, opacity: 1, attribution: "NASA GIBS" }
           ).addTo(map);
         } else if (indicatorLayers[id]) {
           map.removeLayer(indicatorLayers[id]);
           delete indicatorLayers[id];
+
+          // si ya no hay capas indicador, restaurar satélite
+          if (Object.keys(indicatorLayers).length === 0 && !map.hasLayer(satelliteLayer)) {
+            map.addLayer(satelliteLayer);
+          }
         }
       });
     });
 
-    function updateIndicatorLayers(dateStr) {
-      if (Object.keys(indicatorLayers).length > 0) {
-        for (const id in indicatorLayers) {
-          if (map.hasLayer(indicatorLayers[id])) {
-            map.removeLayer(indicatorLayers[id]);
-            indicatorLayers[id] = L.tileLayer(
-              `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${dateStr}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
-              { maxZoom: 9, opacity: 1, attribution: "NASA GIBS" }
-            ).addTo(map);
-          }
-        }
+    // actualizar capas de indicadores usando un ISO timestamp (YYYY-MM-DDTHH:MM:SSZ)
+    function updateIndicatorLayers(isoTimestamp){
+      // isoTimestamp: string completo como '2025-10-02T23:11:48Z'
+      for (const id in indicatorLayers){
+        const wasVisible = map.hasLayer(indicatorLayers[id]);
+        // remover antigua
+        try { map.removeLayer(indicatorLayers[id]); } catch(e){}
+        // crear nueva con timestamp
+        indicatorLayers[id] = L.tileLayer(
+          `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${isoTimestamp}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
+          { maxZoom: 9, opacity: 1, attribution: "NASA GIBS" }
+        );
+        if (wasVisible) indicatorLayers[id].addTo(map);
       }
     }
 
+    // listeners para que al cambiar fecha/hora se actualicen las capas TEMPO
     tempoDate.addEventListener("change", () => {
-      const newDate = tempoDate.value || todayStr;
-      updateIndicatorLayers(newDate);
+      const iso = buildIsoTimestamp(tempoDate.value || todayStr, tempoTime.value || getUtcTimeString());
+      updateIndicatorLayers(iso);
+    });
+    tempoTime.addEventListener("change", () => {
+      const iso = buildIsoTimestamp(tempoDate.value || todayStr, tempoTime.value || getUtcTimeString());
+      updateIndicatorLayers(iso);
+    });
+
+    // botones auxiliares
+    setNowUtc.addEventListener("click", () => {
+      tempoTime.value = getUtcTimeString();
+      const iso = buildIsoTimestamp(tempoDate.value || todayStr, tempoTime.value);
+      updateIndicatorLayers(iso);
+    });
+    setMidnight.addEventListener("click", () => {
+      tempoTime.value = "00:00:00";
+      const iso = buildIsoTimestamp(tempoDate.value || todayStr, tempoTime.value);
+      updateIndicatorLayers(iso);
     });
 
     indicatorsBtn.addEventListener("click",()=>{ 

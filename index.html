@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Mapa Satélite / Calles + Comparación + Indicadores</title>
+  <title>Mapa Satelital con Indicadores de Calidad de Aire (TEMPO)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -16,14 +16,14 @@
       font-family:sans-serif; padding:6px 10px; cursor:pointer;
       font-size:14px; box-shadow:0 1px 4px rgba(0,0,0,0.3);
     }
-    .compare-panel, .indicators-panel {
-      position:absolute; top:60px; background:white; border:1px solid #ccc;
-      border-radius:8px; padding:10px; box-shadow:0 2px 6px rgba(0,0,0,0.3);
-      font-family:sans-serif; z-index:1100;
+    .indicators-panel {
+      position:absolute; top:60px; left:10px; width:340px;
+      max-height:80%; overflow-y:auto; background:white;
+      border:1px solid #ccc; border-radius:8px; padding:10px;
+      box-shadow:0 2px 6px rgba(0,0,0,0.3); font-family:sans-serif;
+      z-index:1100; display:none;
     }
-    .compare-panel { right:10px; width:230px; display:none; }
-    .indicators-panel { left:10px; width:340px; max-height:80%; overflow-y:auto; display:none; }
-    .compare-close, .indicators-close {
+    .indicators-close {
       position:absolute; top:5px; right:8px; background:#eee; border:none;
       border-radius:50%; width:22px; height:22px; cursor:pointer; font-weight:bold;
     }
@@ -53,19 +53,7 @@
   <div class="controls">
     <input type="date" id="datePicker" class="custom-button" />
     <button class="custom-button" id="toggleBtn">Ver Calles</button>
-    <button class="custom-button" id="compareBtn">Comparar Fechas</button>
     <button class="custom-button" id="indicatorsBtn">Gases (TEMPO)</button>
-  </div>
-
-  <div class="compare-panel" id="comparePanel">
-    <button class="compare-close" id="closeCompare">×</button>
-    <h4>Comparación</h4>
-    <label>Fecha inicial:</label>
-    <input type="date" id="startDate" style="width:100%; margin-bottom:8px;">
-    <label>Fecha final:</label>
-    <input type="date" id="endDate" style="width:100%; margin-bottom:8px;">
-    <button id="startCompare" class="custom-button">Iniciar animación</button>
-    <button id="stopCompare" class="custom-button">Detener</button>
   </div>
 
   <div class="indicators-panel" id="indicatorsPanel">
@@ -148,6 +136,7 @@
     });
     datePicker.addEventListener("change",()=>{ if(datePicker.value) fadeToNewLayer(datePicker.value); });
 
+    // === Indicadores TEMPO ===
     const indicatorsBtn=document.getElementById("indicatorsBtn");
     const indicatorsPanel=document.getElementById("indicatorsPanel");
     const closeIndicators=document.getElementById("closeIndicators");
@@ -161,10 +150,10 @@
     const dateLabel=document.getElementById("dateLabel");
 
     const validIndicators=[
-      { id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehyde (L3, Vertical Column)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_HCHO_Vertical_Column_H.svg" },
-      { id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"NO₂ (L3, Troposphere Column)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_NO2_Vertical_Column_Troposphere_H.svg" },
-      { id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"O₃ (L3, Troposphere Column)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Troposphere_Ozone_Column_H.svg" },
-      { id:"TEMPO_L3_Cloud_Cloud_Pressure_Total", name:"Clouds (L3, Cloud Pressure Total)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Cloud_Cloud_Pressure_Total_H.svg" }
+      { id:"TEMPO_L3_Formaldehyde_Vertical_Column", name:"Formaldehído (HCHO) - Columna Vertical", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_HCHO_Vertical_Column_H.svg" },
+      { id:"TEMPO_L3_NO2_Vertical_Column_Troposphere", name:"Dióxido de Nitrógeno (NO₂)", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_NO2_Vertical_Column_Troposphere_H.svg" },
+      { id:"TEMPO_L3_Ozone_Profile_Troposphere_Column", name:"Ozono (O₃) - Columna Troposférica", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Troposphere_Ozone_Column_H.svg" },
+      { id:"TEMPO_L3_Cloud_Cloud_Pressure_Total", name:"Nubes - Presión Total", legend:"https://gibs.earthdata.nasa.gov/legends/TEMPO_Cloud_Cloud_Pressure_Total_H.svg" }
     ];
 
     let indicatorLayers={};
@@ -261,12 +250,26 @@
     function updateIndicatorLayers(iso){
       for(const id in indicatorLayers){
         const vis=map.hasLayer(indicatorLayers[id]);
-        map.removeLayer(indicatorLayers[id]);
-        indicatorLayers[id]=L.tileLayer(
-          `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${iso}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
-          {maxZoom:9,opacity:0.8,attribution:"NASA GIBS"}
-        );
-        if(vis) indicatorLayers[id].addTo(map);
+        if(vis){
+          // transición suave
+          const oldLayer=indicatorLayers[id];
+          const newLayer=L.tileLayer(
+            `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${iso}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
+            {maxZoom:9,opacity:0}
+          );
+          newLayer.addTo(map);
+          let opacity=0;
+          const fadeInterval=setInterval(()=>{
+            opacity+=0.1;
+            newLayer.setOpacity(opacity);
+            oldLayer.setOpacity(1-opacity);
+            if(opacity>=1){
+              clearInterval(fadeInterval);
+              map.removeLayer(oldLayer);
+              indicatorLayers[id]=newLayer;
+            }
+          },100);
+        }
       }
     }
 
@@ -282,12 +285,13 @@
       dateLabel.style.display="block";
       function animate(){
         const t=subset[idx];
-        selectedIso=t; updateIndicatorLayers(t);
+        selectedIso=t;
+        updateIndicatorLayers(t);
         dateLabel.textContent=`🕒 ${t}`;
         idx=(idx+1)%subset.length;
       }
       animate();
-      tempoTimer=setInterval(animate,2200);
+      tempoTimer=setInterval(animate,2500);
     });
 
     stopTempoAnim.addEventListener("click",()=>{
@@ -305,5 +309,6 @@
   </script>
 </body>
 </html>
+
 
 

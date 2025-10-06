@@ -54,6 +54,8 @@
     <button class="custom-button" id="toggleBtn">Switch to street map</button>
     <button class="custom-button" id="indicatorsBtn">Indicators view</button>
     <button id="btnAQICN" class="custom-button">Monitoring points</button>
+    <input type="text" id="aqiFilter" class="custom-button" placeholder="Filter region or city" style="display:none;" />
+    <button id="btnClearAQI" class="custom-button" style="display:none;">Clear points</button>
   </div>
 
   <div class="indicators-panel" id="indicatorsPanel">
@@ -331,56 +333,97 @@
   </script>
 
   <!-- MONITORING POINTS (AQICN) -->
-  <script>
-  let allMarkers = {};
-  function loadAQICNMonitoring(map) {
-    const token = "090ca286c1bb00d992871976d77c05b6347a17d1"; // tu token de AQICN
-    const bounds = map.getBounds();
-    const boundsString = `${bounds.getNorth()},${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()}`;
-    fetch(`https://api.waqi.info/v2/map/bounds/?latlng=${boundsString}&token=${token}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.status !== "ok") throw new Error(data.data);
-        removeAQIMarkers(map);
-        data.data.forEach(station => {
-          const iw = 83, ih = 107;
-          const icon = L.icon({
-            iconUrl: `https://waqi.info/mapicon/${station.aqi}.30.png`,
-            iconSize: [iw / 2, ih / 2],
-            iconAnchor: [iw / 4, ih / 2 - 5],
-          });
-          const marker = L.marker([station.lat, station.lon], {
-            icon,
-            title: station.station.name,
-          }).addTo(map);
+<script>
+let allMarkers = {};
+let aqiControlsVisible = false;
 
-          marker.on("click", () => {
-            fetch(`https://api.waqi.info/feed/@${station.uid}/?token=${token}`)
-              .then(r => r.json())
-              .then(info => {
-                if (info.status !== "ok") return;
-                const m = info.data;
-                let html = `<b>${m.city.name}</b><br>AQI: <b>${m.aqi}</b><br>`;
-                html += `<small>Updated: ${new Date(m.time.v * 1000).toLocaleTimeString()}</small><br>`;
-                if (m.iaqi) {
-                  html += "<b>Pollutants:</b><br>";
-                  for (let p in m.iaqi) {
-                    html += `${p.toUpperCase()}: ${m.iaqi[p].v}<br>`;
-                  }
-                }
-                marker.bindPopup(html).openPopup();
-              });
-          });
-          allMarkers[station.uid] = marker;
+function loadAQICNMonitoring(map) {
+  const filterInput = document.getElementById("aqiFilter");
+  const clearBtn = document.getElementById("btnClearAQI");
+
+  // Mostrar u ocultar controles
+  if (!aqiControlsVisible) {
+    filterInput.style.display = "block";
+    clearBtn.style.display = "block";
+    aqiControlsVisible = true;
+  } else {
+    filterInput.style.display = "none";
+    clearBtn.style.display = "none";
+    aqiControlsVisible = false;
+  }
+
+  // Si ya hay puntos, no recargamos todos otra vez
+  if (Object.keys(allMarkers).length > 0) return;
+
+  const token = "090ca286c1bb00d992871976d77c05b6347a17d1"; // tu token de AQICN
+  const bounds = map.getBounds();
+  const boundsString = `${bounds.getNorth()},${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()}`;
+
+  fetch(`https://api.waqi.info/v2/map/bounds/?latlng=${boundsString}&token=${token}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.status !== "ok") throw new Error(data.data);
+      removeAQIMarkers(map);
+      data.data.forEach(station => {
+        const iw = 83, ih = 107;
+        const icon = L.icon({
+          iconUrl: `https://waqi.info/mapicon/${station.aqi}.30.png`,
+          iconSize: [iw / 2, ih / 2],
+          iconAnchor: [iw / 4, ih / 2 - 5],
         });
-      })
-      .catch(err => { console.warn("Error AQICN:", err); });
-  }
+        const marker = L.marker([station.lat, station.lon], {
+          icon,
+          title: station.station.name,
+        }).addTo(map);
 
-  function removeAQIMarkers(map) {
-    Object.values(allMarkers).forEach(m => map.removeLayer(m));
-    allMarkers = {};
-  }
-  </script>
+        marker.on("click", () => {
+          fetch(`https://api.waqi.info/feed/@${station.uid}/?token=${token}`)
+            .then(r => r.json())
+            .then(info => {
+              if (info.status !== "ok") return;
+              const m = info.data;
+              let html = `<b>${m.city.name}</b><br>AQI: <b>${m.aqi}</b><br>`;
+              html += `<small>Updated: ${new Date(m.time.v * 1000).toLocaleTimeString()}</small><br>`;
+              if (m.iaqi) {
+                html += "<b>Pollutants:</b><br>";
+                for (let p in m.iaqi) {
+                  html += `${p.toUpperCase()}: ${m.iaqi[p].v}<br>`;
+                }
+              }
+              marker.bindPopup(html).openPopup();
+            });
+        });
+        allMarkers[station.uid] = marker;
+      });
+
+      // Filtro dinámico por texto
+      filterInput.addEventListener("input", () => {
+        const term = filterInput.value.toLowerCase();
+        Object.values(allMarkers).forEach(m => {
+          const name = m.options.title.toLowerCase();
+          if (name.includes(term)) {
+            if (!map.hasLayer(m)) m.addTo(map);
+          } else {
+            if (map.hasLayer(m)) map.removeLayer(m);
+          }
+        });
+      });
+
+      // Botón para limpiar todos los puntos
+      clearBtn.addEventListener("click", () => {
+        removeAQIMarkers(map);
+        filterInput.value = "";
+      });
+    })
+    .catch(err => { console.warn("Error AQICN:", err); });
+}
+
+function removeAQIMarkers(map) {
+  Object.values(allMarkers).forEach(m => map.removeLayer(m));
+  allMarkers = {};
+}
+</script>
+
 </body>
 </html>
+

@@ -401,7 +401,7 @@ function loadAQICNMonitoring(map) {
         const term = filterInput.value.toLowerCase();
         Object.values(allMarkers).forEach(m => {
           const name = m.options.title.toLowerCase();
-          if (name.includes(term)) {
+            if (name.includes(term)) {
             if (!map.hasLayer(m)) m.addTo(map);
           } else {
             if (map.hasLayer(m)) map.removeLayer(m);
@@ -409,21 +409,28 @@ function loadAQICNMonitoring(map) {
         });
       });
 
-      // Botón para limpiar todos los puntos
+      // Botón para eliminar todos los marcadores y ocultar el filtro
       clearBtn.addEventListener("click", () => {
         removeAQIMarkers(map);
         filterInput.value = "";
+        filterInput.style.display = "none";
+        clearBtn.style.display = "none";
       });
     })
-    .catch(err => { console.warn("Error AQICN:", err); });
+    .catch(err => {
+      console.error("Error loading AQICN data:", err);
+      alert("Failed to load AQI monitoring points. Try again later.");
+    });
 }
 
 function removeAQIMarkers(map) {
-  Object.values(allMarkers).forEach(m => map.removeLayer(m));
+  for (const uid in allMarkers) {
+    if (map.hasLayer(allMarkers[uid])) {
+      map.removeLayer(allMarkers[uid]);
+    }
+  }
   allMarkers = {};
 }
 </script>
-
 </body>
 </html>
-
